@@ -61,7 +61,7 @@ var done=false;
 var ms=new MediaSource(), sb=null, queue=[], hdr=null, parts=[], got=0;
 var recStart=null, off=null, live=false;
 var segs=0, bytes=0, waits=0, jumps=0, appendErr=null, appends=0, appendMs=0, appendT=0;
-var asb=null, aqueue=[], asegs=0;
+var asb=null, aqueue=[], asegs=0, amime=null;
 v.src=URL.createObjectURL(ms);
 v.addEventListener('waiting',function(){ waits++; });
 
@@ -69,7 +69,7 @@ function onMedia(e){
   if(typeof e.data==='string'){
     var m=JSON.parse(e.data);
     if(m.k==='hello'){ recStart=m.recStart; openSb(m.mime); }
-    else if(m.k==='ahello'){ openASb(m.mime); }
+    else if(m.k==='ahello'){ amime=m.mime; openASb(m.mime); }
     else if(m.k==='seg'){ hdr=m; parts=[]; got=0; }
     else if(m.k==='bye'){ finish(m.said||''); }
     return;
@@ -78,7 +78,7 @@ function onMedia(e){
   if(hdr && got>=hdr.len){
     var all=new Uint8Array(got), o=0;
     parts.forEach(function(p){ all.set(p,o); o+=p.length; });
-    if(hdr.s===2){ aqueue.push(all.buffer); asegs++; bytes+=got; hdr=null; parts=[]; got=0; apump(); }
+    if(hdr.s===2){ if(amime||asb)aqueue.push(all.buffer); asegs++; bytes+=got; hdr=null; parts=[]; got=0; apump(); }
     else { queue.push(all.buffer); segs++; bytes+=got; hdr=null; parts=[]; got=0; pump(); }
   }
 }
@@ -91,6 +91,8 @@ function openSb(mime){
   if(!sb){ say('This television cannot play the picture'); return; }
   sb.addEventListener('updateend',function(){ appendMs+=performance.now()-appendT; pump(); });
   sb.addEventListener('error',function(){ appendErr='sb error'; });
+  /* the sound usually says hello first, and was then never opened at all: open it now */
+  if(amime && !asb)openASb(amime);
 }
 /* Everything that arrived while the last append ran goes in as one: a 2013 stick cannot
    take thirty separate appends a second, and as one buffer it keeps up. */
@@ -110,10 +112,11 @@ function pump(){
 /* the sound's buffer is only ever the second one: C17 allows one (D436) */
 function openASb(mime){
   if(asb)return;
-  if(!sb){ log({k:'asbskip',said:'the picture has not opened its buffer yet'}); return; }
+  if(!sb)return;                                   // opened from openSb once the picture has its buffer
   try{ asb=ms.addSourceBuffer(mime); log({k:'asourcebuffer',type:mime}); }
-  catch(err){ log({k:'asberr',type:mime,e:String(err)}); return; }
+  catch(err){ log({k:'asberr',type:mime,e:String(err)}); amime=null; aqueue=[]; return; }
   asb.addEventListener('updateend',apump);
+  apump();                                          // everything that arrived while it waited
 }
 function apump(){
   if(!asb || asb.updating || !aqueue.length) return;
