@@ -6,14 +6,16 @@ html,body{margin:0;height:100%;background:#000;color:#eee;font:28px/1.35 system-
 video{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:contain;background:#000}
 #idle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
       background:radial-gradient(60% 60% at 50% 45%,#141a22,#000)}
-#idle b{font:600 58px/1 system-ui,sans-serif;letter-spacing:.12em;color:#cfd6e0}
+/* the real mark (10_REFERENCE/14_BRAND), trimmed to its glow; its lettering is 94 per cent of the
+   picture, so 63.8 per cent of the screen puts the lettering at 60 - Kim, 24 Sep */
+#idle img{width:63.8vw;height:auto;display:block}
 #idle span{color:#7f8a99;font-size:26px}
 #st{position:absolute;left:40px;bottom:26px;right:40px;font:22px monospace;color:#6f7d8c;white-space:pre-wrap;
     text-shadow:0 0 6px #000;opacity:0;transition:opacity .3s}
 body.dbg #st{opacity:1}
 </style></head><body>
 <video id="v" muted playsinline></video>
-<div id="idle"><b>INTERSTELLAR MARINES</b><span id="idlesay">Waiting for CIA</span></div>
+<div id="idle"><img src="logo.png" alt="Interstellar Marines"><span id="idlesay">Waiting for CIA</span></div>
 <div id="st"></div>
 <script>
 /* The logic lives in cast-receiver.js (receiver.js on the site), fetched fresh every launch:
