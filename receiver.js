@@ -16,10 +16,12 @@
    GitHub lets a screen keep a page ten minutes and a fix should not wait that long.
 
    Knobs, for testing: ?target= reserve seconds, ?jump= seconds before a skip, ?rate= catch-up
-   speed. The sender can turn the status line on with a 'dbg' message. */
+   speed, ?settle= seconds between skips. The sender can turn the status line on with a 'dbg'
+   message. */
 var NS='urn:x-cast:com.interstellarmarines.cia';
 var Q=new URLSearchParams(location.search);
 var TARGET=+(Q.get('target')||0.25), JUMP=+(Q.get('jump')||2.0), RATE=+(Q.get('rate')||1.08);
+var SETTLE=+(Q.get('settle')||3.0);
 var v=document.getElementById('v'), st=document.getElementById('st');
 var idle=document.getElementById('idle'), idlesay=document.getElementById('idlesay');
 var ctx=null, sender=null;
@@ -47,8 +49,11 @@ var ms=new MediaSource(), sb=null, queue=[], hdr=null, parts=[], got=0;
 var recStart=null, off=null, live=false;
 var segs=0, bytes=0, waits=0, jumps=0, appendErr=null, appends=0, appendMs=0, appendT=0;
 var asb=null, aqueue=[], asegs=0, amime=null;
+var keys=[], lastSkip=0, skipAt=0;                // keyframe times in hand; when the last skip was
 v.src=URL.createObjectURL(ms);
 v.addEventListener('waiting',function(){ waits++; });
+/* how long each skip took to show a picture again, into the log (N1110) */
+v.addEventListener('playing',function(){ if(skipAt){ log({k:'resumed',ms:Date.now()-skipAt}); skipAt=0; } });
 
 function onMedia(e){
   if(typeof e.data==='string'){
@@ -64,7 +69,10 @@ function onMedia(e){
     var all=new Uint8Array(got), o=0;
     parts.forEach(function(p){ all.set(p,o); o+=p.length; });
     if(hdr.s===2){ if(amime||asb)aqueue.push(all.buffer); asegs++; bytes+=got; hdr=null; parts=[]; got=0; apump(); }
-    else { queue.push(all.buffer); segs++; bytes+=got; hdr=null; parts=[]; got=0; pump(); }
+    else {
+      if(hdr.kt!=null){ keys.push(hdr.kt); if(keys.length>40)keys.shift(); }
+      queue.push(all.buffer); segs++; bytes+=got; hdr=null; parts=[]; got=0; pump();
+    }
   }
 }
 function openSb(mime){
@@ -134,7 +142,22 @@ function steer(){
       });
     }
     if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; }
-    if(lag>JUMP){ v.currentTime=end-TARGET; jumps++; }
+    if(lag>JUMP && Date.now()-lastSkip>SETTLE*1000){
+      /* SKIP ONTO A KEYFRAME, AND LET IT SETTLE (N1110). C17, 24 Sep, a film with sound: 60
+         skips in twelve minutes, each one landing wherever the buffer ended - so the stick had
+         to decode from the keyframe before it, up to two seconds of pictures, the likeliest
+         reason it fell straight behind again. The newest keyframe in hand is where a picture
+         can start at once; a sender too old to say where they are gets the old skip. Every
+         skip is logged with both tracks' ends, so the next cast says which one it waited on. */
+      var to=end-TARGET, onKey=false;
+      for(var i=keys.length-1;i>=0;i--){
+        if(keys[i]<=end-0.05){ if(keys[i]>v.currentTime+0.5){ to=keys[i]; onKey=true; } break; }
+      }
+      log({k:'skip',from:+v.currentTime.toFixed(3),to:+to.toFixed(3),key:onKey,lag:+lag.toFixed(3),
+           vr:sb?sb.buffered.length:0,ar:asb?asb.buffered.length:0,av:avGap()});
+      skipAt=lastSkip=Date.now();
+      v.currentTime=to; jumps++;
+    }
     else if(lag>TARGET+0.15) v.playbackRate=RATE;
     else v.playbackRate=1.0;
     if(sb && !sb.updating && v.buffered.length && v.currentTime-v.buffered.start(0)>15){
@@ -192,12 +215,23 @@ function answer(sdp){
     .catch(function(e){ log({k:'rtcerr',e:String(e)}); tell({k:'failed',said:String(e)}); say('Could not connect: '+e); });
 }
 
+/* the picture's buffered end less the sound's, in milliseconds: which track the screen is
+   waiting on when it stalls (vr and ar count each track's pieces of buffer - more than one
+   is a hole) */
+function avGap(){
+  try{
+    if(sb&&asb&&sb.buffered.length&&asb.buffered.length)
+      return Math.round(1000*(sb.buffered.end(sb.buffered.length-1)-asb.buffered.end(asb.buffered.length-1)));
+  }catch(e){}
+  return null;
+}
 /* ---- how it is going, every two seconds, back to CIA ---- */
 setInterval(function(){
   var o={k:'tv',segs:segs,asegs:asegs,sound:!!asb,kbps:Math.round(bytes*8/2000),waits:waits,jumps:jumps,
          rate:v.playbackRate,paused:v.paused,err:appendErr,w:v.videoWidth,h:v.videoHeight,
          appends:appends,appendMs:appends?Math.round(appendMs/appends):null};
   if(v.buffered.length)o.reserve=Math.round(1000*(v.buffered.end(v.buffered.length-1)-v.currentTime));
+  o.vr=sb?sb.buffered.length:0; o.ar=asb?asb.buffered.length:0; o.av=avGap();
   if(off!==null && recStart!==null && v.currentTime>0)o.delay=Math.round((Date.now()-off)-(recStart+v.currentTime*1000));
   try{ var pq=v.getVideoPlaybackQuality(); o.total=pq.totalVideoFrames; o.dropped=pq.droppedVideoFrames; }catch(e){}
   if(live||segs)log(o);
