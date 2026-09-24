@@ -20,8 +20,8 @@
    message. */
 var NS='urn:x-cast:com.interstellarmarines.cia';
 var Q=new URLSearchParams(location.search);
-var TARGET=+(Q.get('target')||0.25), JUMP=+(Q.get('jump')||2.0), RATE=+(Q.get('rate')||1.08);
-var SETTLE=+(Q.get('settle')||3.0);
+var TARGET=+(Q.get('target')||0.75), JUMP=+(Q.get('jump')||3.0), RATE=+(Q.get('rate')||1.08);
+var SETTLE=+(Q.get('settle')||3.0), FAST=+(Q.get('fast')||0.5);
 var v=document.getElementById('v'), st=document.getElementById('st');
 var idle=document.getElementById('idle'), idlesay=document.getElementById('idlesay');
 var ctx=null, sender=null;
@@ -128,8 +128,13 @@ function apump(){
   aqueue=[];
   try{ asb.appendBuffer(buf); }catch(err){ log({k:'aappenderr',e:String(err)}); }
 }
-/* A quarter of a second in hand; when it falls behind it plays slightly fast rather than
-   skipping, because a skip restarts this device's hardware player. */
+/* THREE QUARTERS OF A SECOND IN HAND (N1112). It was a quarter, and on C17 over Wi-Fi the
+   pieces arrive in bursts with half-second gaps: the screen froze for about a second twice a
+   minute, and it played slightly fast most of the time to stay that close, eating its own
+   cushion. Now it starts with 0.75 s in hand, plays fast only when more than half a second
+   past that, and skips only past 3 seconds - a steady second or so behind instead of
+   bouncing between half a second and two and a half. A skip restarts this device's
+   hardware player, so it is the last resort. */
 function steer(){
   if(done)return;
   if(v.buffered.length){
@@ -151,14 +156,14 @@ function steer(){
          skip is logged with both tracks' ends, so the next cast says which one it waited on. */
       var to=end-TARGET, onKey=false;
       for(var i=keys.length-1;i>=0;i--){
-        if(keys[i]<=end-0.05){ if(keys[i]>v.currentTime+0.5){ to=keys[i]; onKey=true; } break; }
+        if(keys[i]<=end-TARGET){ if(keys[i]>v.currentTime+0.5){ to=keys[i]; onKey=true; } break; }
       }
       log({k:'skip',from:+v.currentTime.toFixed(3),to:+to.toFixed(3),key:onKey,lag:+lag.toFixed(3),
            vr:sb?sb.buffered.length:0,ar:asb?asb.buffered.length:0,av:avGap()});
       skipAt=lastSkip=Date.now();
       v.currentTime=to; jumps++;
     }
-    else if(lag>TARGET+0.15) v.playbackRate=RATE;
+    else if(lag>TARGET+FAST) v.playbackRate=RATE;
     else v.playbackRate=1.0;
     if(sb && !sb.updating && v.buffered.length && v.currentTime-v.buffered.start(0)>15){
       try{ sb.remove(0,v.currentTime-8); }catch(err){}
