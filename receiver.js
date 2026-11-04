@@ -24,7 +24,7 @@ var TARGET=+(Q.get('target')||0.75), JUMP=+(Q.get('jump')||3.0), RATE=+(Q.get('r
 var SETTLE=+(Q.get('settle')||3.0), FAST=+(Q.get('fast')||0.5);
 var v=document.getElementById('v'), st=document.getElementById('st');
 var idle=document.getElementById('idle'), idlesay=document.getElementById('idlesay');
-var ctx=null, sender=null;
+var ctx=null, sender=null, heard={};
 
 function say(t){ idlesay.textContent=t; }
 /* everything this page wants to report goes back to CIA inside the Cast connection */
@@ -39,8 +39,35 @@ function caps(){
             'audio/mp4;codecs="mp4a.40.2"','video/mp4;codecs="avc1.640028,mp4a.40.2"'];
   var c={k:'caps'};
   want.forEach(function(x){ try{ c[x]=MediaSource.isTypeSupported(x); }catch(e){ c[x]='threw'; } });
-  c.ua=navigator.userAgent; c.w=screen.width; c.h=screen.height;
+  c.ua=navigator.userAgent; c.w=screen.width; c.h=screen.height; c.dpr=window.devicePixelRatio||1;
   log(c);
+}
+
+/* ---- A PICTURE (N1512, 4 Nov 2026). The phone sends the file itself, because away from home
+   the television can never reach the desk: down the call's data channel as a 'pic' piece, or,
+   where the call cannot connect, in small parts inside the Cast connection. It is decoded off
+   screen and only then swapped in, so the last picture holds until the next is ready. ---- */
+var pic=document.createElement('img');
+pic.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none';
+document.body.appendChild(pic);
+var picUrl=null, picIn={};
+function showPic(u8,meta){
+  var t0=Date.now(), url=URL.createObjectURL(new Blob([u8],{type:meta.mime||'image/jpeg'}));
+  var im=new Image(); im.src=url;
+  (im.decode?im.decode():Promise.resolve()).then(function(){
+    pic.src=url; pic.style.display=''; idle.style.display='none';
+    if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
+    log({k:'pic',id:meta.id,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0});
+    tell({k:'shown',id:meta.id});
+  },function(err){ URL.revokeObjectURL(url); log({k:'picerr',id:meta.id,e:String(err)}); tell({k:'shown',id:meta.id,failed:true}); });
+}
+function picPart(m){
+  if(m.k==='pic0'){ picIn={id:m.id,mime:m.mime,len:m.len,parts:[]}; return; }
+  if(m.id!==picIn.id)return;
+  if(m.k==='picp'){ picIn.parts.push(m.b); return; }
+  var s=atob(picIn.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  showPic(u8,picIn); picIn={};
 }
 
 /* ---- the picture ---- */
@@ -60,7 +87,7 @@ function onMedia(e){
     var m=JSON.parse(e.data);
     if(m.k==='hello'){ recStart=m.recStart; openSb(m.mime); }
     else if(m.k==='ahello'){ amime=m.mime; openASb(m.mime); }
-    else if(m.k==='seg'){ hdr=m; parts=[]; got=0; }
+    else if(m.k==='seg'||m.k==='pic'){ hdr=m; parts=[]; got=0; }
     else if(m.k==='bye'){ finish(m.said||''); }
     return;
   }
@@ -68,7 +95,8 @@ function onMedia(e){
   if(hdr && got>=hdr.len){
     var all=new Uint8Array(got), o=0;
     parts.forEach(function(p){ all.set(p,o); o+=p.length; });
-    if(hdr.s===2){ if(amime||asb)aqueue.push(all.buffer); asegs++; bytes+=got; hdr=null; parts=[]; got=0; apump(); }
+    if(hdr.k==='pic'){ var meta=hdr; hdr=null; parts=[]; got=0; showPic(all,meta); }
+    else if(hdr.s===2){ if(amime||asb)aqueue.push(all.buffer); asegs++; bytes+=got; hdr=null; parts=[]; got=0; apump(); }
     else {
       if(hdr.kt!=null){ keys.push(hdr.kt); if(keys.length>40)keys.shift(); }
       queue.push(all.buffer); segs++; bytes+=got; hdr=null; parts=[]; got=0; pump();
@@ -146,7 +174,7 @@ function steer(){
         if(!v.muted){ v.muted=true; log({k:'muted-again',said:'this screen will not start sound on its own'}); }
       });
     }
-    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; }
+    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; pic.style.display='none'; }
     if(lag>JUMP && Date.now()-lastSkip>SETTLE*1000){
       /* SKIP ONTO A KEYFRAME, AND LET IT SETTLE (N1110). C17, 24 Sep, a film with sound: 60
          skips in twelve minutes, each one landing wherever the buffer ended - so the stick had
@@ -177,7 +205,7 @@ steer();
 function finish(said){
   if(done)return; done=true;
   try{ v.pause(); }catch(e){}
-  live=false; idle.style.display='';
+  live=false; idle.style.display=''; pic.style.display='none';
   say(said||'CIA stopped sending');
   log({k:'bye',said:said});
 }
@@ -185,6 +213,8 @@ function finish(said){
 /* ---- the call: the offer arrives inside the Cast connection, and so does our answer ---- */
 var pc=null, tc=null;
 function answer(sdp){
+  /* a sender that comes back (the phone's app reopened) makes a new call; the old one goes */
+  if(pc){ try{ pc.close(); }catch(e){} pc=null; }
   pc=new RTCPeerConnection({iceServers:[]});
   pc.ondatachannel=function(e){
     var ch=e.channel;
@@ -251,10 +281,13 @@ try{
     var m=e.data;
     if(typeof m==='string'){ try{ m=JSON.parse(m); }catch(x){ return; } }
     if(!m)return;
-    var first=!sender;
-    sender=e.senderId;
+    /* EVERY SENDER HEARS WHAT THIS SCREEN CAN DO, not only the first (N1512): a phone that
+       joined a cast already running was answered with nothing at all */
+    var first=!heard[e.senderId];
+    heard[e.senderId]=1; sender=e.senderId;
     if(first)caps();
-    if(m.k==='offer'){ say('Connecting to CIA'); answer(m.sdp); }
+    if(m.k==='offer'){ if(!pic.src||pic.style.display==='none')say('Connecting to CIA'); answer(m.sdp); }
+    else if(m.k==='pic0'||m.k==='picp'||m.k==='pic1'){ picPart(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
   });
