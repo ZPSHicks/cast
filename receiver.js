@@ -73,17 +73,56 @@ var view={z:1,cx:0.5,cy:0.5,vs:0};
 var sharp=document.createElement('img');
 sharp.style.cssText=pic.style.cssText;
 document.body.appendChild(sharp);
-var sharpUrl=null;
-pic.style.transformOrigin='50% 50%'; pic.style.transition='transform 90ms linear';
-function placePic(){
-  var W=window.innerWidth, H=window.innerHeight;
-  if(!picW||!picH||view.z<=1){ pic.style.transform=''; return; }
-  var s=Math.min(W/picW,H/picH), bw=picW*s, bh=picH*s;
-  pic.style.transform='translate('+((0.5-view.cx)*bw*view.z)+'px,'+((0.5-view.cy)*bh*view.z)+'px) scale('+view.z+')';
+var sharpUrl=null, picIm=null;
+/* A ZOOMED VIEW IS DRAWN, NOT STRETCHED (Kim, 5 Nov: "when I pan a bit more, I get black lines and it jumps").
+   The picture used to be the whole screen's image scaled up to eight times by the browser, a layer far larger
+   than an old box draws in one go: it painted it in tiles as the pan reached them, black until each arrived.
+   Now only the part on screen is drawn, on a canvas the size of the screen, with the same sums the phone's sharp
+   frame uses. Each move glides there over a few frames, as the transition did, and a gesture's moves are
+   counted (`pan` lines), so a jump the link causes can be told from one this page causes. */
+var zc=document.createElement('canvas');
+zc.style.cssText='position:absolute;inset:0;width:100%;height:100%;display:none;background:#000';
+document.body.insertBefore(zc,sharp);
+var zg=zc.getContext('2d'), zcur=null, zraf=0, pan=null;
+function zDraw(v){
+  var dpr=window.devicePixelRatio||1, W=Math.round(window.innerWidth*dpr), H=Math.round(window.innerHeight*dpr);
+  if(zc.width!==W||zc.height!==H){ zc.width=W; zc.height=H; }
+  zg.fillStyle='#000'; zg.fillRect(0,0,W,H);
+  var s=Math.min(W/picW,H/picH)*v.z, dx=W/2-v.cx*picW*s, dy=H/2-v.cy*picH*s;
+  var x0=Math.max(0,dx), y0=Math.max(0,dy), x1=Math.min(W,dx+picW*s), y1=Math.min(H,dy+picH*s);
+  if(x1>x0&&y1>y0){ zg.imageSmoothingQuality='high';
+    zg.drawImage(picIm,(x0-dx)/s,(y0-dy)/s,(x1-x0)/s,(y1-y0)/s,x0,y0,x1-x0,y1-y0); }
+  if(pan)pan.draws++;
+}
+function zStep(){
+  zraf=0;
+  if(!picIm||view.z<=1||!zcur)return;
+  var k=0.45, d=Math.abs(view.z-zcur.z)/view.z+Math.abs(view.cx-zcur.cx)+Math.abs(view.cy-zcur.cy);
+  if(d<0.0005){ zcur={z:view.z,cx:view.cx,cy:view.cy}; }
+  else{ zcur={z:zcur.z+(view.z-zcur.z)*k,cx:zcur.cx+(view.cx-zcur.cx)*k,cy:zcur.cy+(view.cy-zcur.cy)*k}; }
+  zDraw(zcur);
+  if(d>=0.0005)zraf=requestAnimationFrame(zStep);
+}
+function placePic(snap){
+  pic.style.transform='';
+  if(!picW||!picH||!picIm||view.z<=1){ zc.style.display='none'; zcur=null; return; }
+  if(snap||!zcur||zc.style.display==='none'){ zcur={z:view.z,cx:view.cx,cy:view.cy}; zDraw(zcur); }
+  else if(!zraf)zraf=requestAnimationFrame(zStep);
+  zc.style.display='';
+}
+/* one gesture's moves, said once its fingers have rested a second */
+function panNote(){
+  var now=Date.now();
+  if(!pan)pan={t0:now,last:now,n:0,max:0,draws:0,tm:0};
+  else{ pan.max=Math.max(pan.max,now-pan.last); pan.last=now; }
+  pan.n++; clearTimeout(pan.tm);
+  pan.tm=setTimeout(function(){ var p=pan; pan=null;
+    if(p.n>2)log({k:'pan',moves:p.n,ms:p.last-p.t0,gapMax:p.max,gapAvg:Math.round((p.last-p.t0)/(p.n-1)),draws:p.draws,z:view.z}); },1000);
 }
 function onView(m){
   view={z:+m.z||1,cx:m.cx!=null?+m.cx:0.5,cy:m.cy!=null?+m.cy:0.5,vs:+m.vs||0};
   sharp.style.display='none';
+  panNote();
   placePic();
 }
 function showPic(u8,meta){
@@ -96,7 +135,7 @@ function showPic(u8,meta){
       else{ sharp.src=url; sharp.style.display=''; if(sharpUrl)URL.revokeObjectURL(sharpUrl); sharpUrl=url; }
     }
     else{
-      picW=im.naturalWidth; picH=im.naturalHeight; placePic();
+      picW=im.naturalWidth; picH=im.naturalHeight; picIm=im; placePic(true);
       pic.src=url; pic.style.display=''; idle.style.display='none'; sharp.style.display='none';
       if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
     }
