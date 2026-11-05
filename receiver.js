@@ -41,7 +41,18 @@ function caps(){
   want.forEach(function(x){ try{ c[x]=MediaSource.isTypeSupported(x); }catch(e){ c[x]='threw'; } });
   c.ua=navigator.userAgent; c.w=screen.width; c.h=screen.height; c.dpr=window.devicePixelRatio||1;
   log(c);
+  /* WHERE THE START WENT (5 Nov: the MiBox takes far longer than C17). Milliseconds from the moment
+     this screen began opening the page: Google's receiver code arriving, ours, Cast started, and the
+     first word from CIA. Its own line, because the desk keeps only 400 characters of each. */
+  var s={k:'start',first:Math.round(performance.now()),started:startedAt};
+  try{ performance.getEntriesByType('resource').forEach(function(r){
+    if(/cast_receiver_framework/.test(r.name))s.google=Math.round(r.responseEnd);
+    else if(/receiver\.js/.test(r.name))s.ours=Math.round(r.responseEnd);
+    else if(/logo\.png/.test(r.name))s.logo=Math.round(r.responseEnd);
+  }); var n=performance.getEntriesByType('navigation')[0]; if(n)s.page=Math.round(n.responseEnd); }catch(e){}
+  log(s);
 }
+var startedAt=null;
 
 /* ---- A PICTURE (N1512, 4 Nov 2026). The phone sends the file itself, because away from home
    the television can never reach the desk: down the call's data channel as a 'pic' piece, or,
@@ -334,5 +345,6 @@ try{
   opts.statusText='Interstellar Marines';
   opts.customNamespaces={};
   opts.customNamespaces[NS]=cast.framework.system.MessageType.JSON;
+  startedAt=Math.round(performance.now());
   ctx.start(opts);
 }catch(e){ say('This page must be opened by Cast: '+e); }
