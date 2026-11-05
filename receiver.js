@@ -233,8 +233,12 @@ function answer(sdp){
   pc.oniceconnectionstatechange=function(){
     log({k:'ice',s:pc.iceConnectionState});
     if(pc.iceConnectionState==='connected')say('Connected - waiting for the picture');
-    if(pc.iceConnectionState==='failed')finish('The connection to CIA failed');
-    if(pc.iceConnectionState==='disconnected')finish('The connection to CIA dropped');
+    /* A CALL THAT DOES NOT CONNECT ENDS ONLY A FILM (5 Nov 2026). From the phone the call is the fast
+       road for pictures, and where it cannot connect they come inside the Cast connection instead -
+       so saying goodbye over it left the MiBox showing 'dropped' with the Cast connection still up. */
+    var gone=pc.iceConnectionState==='failed'||pc.iceConnectionState==='disconnected';
+    if(gone&&(live||segs))finish(pc.iceConnectionState==='failed'?'The connection to CIA failed':'The connection to CIA dropped');
+    else if(gone&&(!pic.src||pic.style.display==='none'))say('Connected to CIA - waiting for a picture');
   };
   pc.setRemoteDescription({type:'offer',sdp:sdp})
     .then(function(){ return pc.createAnswer(); })
