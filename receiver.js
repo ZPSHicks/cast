@@ -50,19 +50,48 @@ function caps(){
 var pic=document.createElement('img');
 pic.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;display:none';
 document.body.appendChild(pic);
-var picUrl=null, picIn={};
+var picUrl=null, picIn={}, picW=0, picH=0;
+/* THE ZOOM IS THE PHONE'S (N1512, 5 Nov 2026). The phone says how far in, as a multiple of the
+   picture fitted, and which point of the picture sits at the centre of this screen; the picture in
+   hand moves at once. Once his fingers rest, the phone sends that exact view drawn sharp from the
+   full file, a 'frame', shown over it until the next move. A new picture takes the standing zoom. */
+var view={z:1,cx:0.5,cy:0.5,vs:0};
+var sharp=document.createElement('img');
+sharp.style.cssText=pic.style.cssText;
+document.body.appendChild(sharp);
+var sharpUrl=null;
+pic.style.transformOrigin='50% 50%'; pic.style.transition='transform 90ms linear';
+function placePic(){
+  var W=window.innerWidth, H=window.innerHeight;
+  if(!picW||!picH||view.z<=1){ pic.style.transform=''; return; }
+  var s=Math.min(W/picW,H/picH), bw=picW*s, bh=picH*s;
+  pic.style.transform='translate('+((0.5-view.cx)*bw*view.z)+'px,'+((0.5-view.cy)*bh*view.z)+'px) scale('+view.z+')';
+}
+function onView(m){
+  view={z:+m.z||1,cx:m.cx!=null?+m.cx:0.5,cy:m.cy!=null?+m.cy:0.5,vs:+m.vs||0};
+  sharp.style.display='none';
+  placePic();
+}
 function showPic(u8,meta){
   var t0=Date.now(), url=URL.createObjectURL(new Blob([u8],{type:meta.mime||'image/jpeg'}));
   var im=new Image(); im.src=url;
   (im.decode?im.decode():Promise.resolve()).then(function(){
-    pic.src=url; pic.style.display=''; idle.style.display='none';
-    if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
-    log({k:'pic',id:meta.id,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0});
-    tell({k:'shown',id:meta.id});
-  },function(err){ URL.revokeObjectURL(url); log({k:'picerr',id:meta.id,e:String(err)}); tell({k:'shown',id:meta.id,failed:true}); });
+    if(meta.frame){
+      /* a sharp view that a newer move has already overtaken is dropped */
+      if(meta.vs!==view.vs||view.z<=1||live){ URL.revokeObjectURL(url); }
+      else{ sharp.src=url; sharp.style.display=''; if(sharpUrl)URL.revokeObjectURL(sharpUrl); sharpUrl=url; }
+    }
+    else{
+      picW=im.naturalWidth; picH=im.naturalHeight; placePic();
+      pic.src=url; pic.style.display=''; idle.style.display='none'; sharp.style.display='none';
+      if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
+    }
+    log({k:'pic',id:meta.id,frame:!!meta.frame,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0});
+    tell({k:'shown',id:meta.id,frame:meta.frame?1:0});
+  },function(err){ URL.revokeObjectURL(url); log({k:'picerr',id:meta.id,e:String(err)}); tell({k:'shown',id:meta.id,failed:true,frame:meta.frame?1:0}); });
 }
 function picPart(m){
-  if(m.k==='pic0'){ picIn={id:m.id,mime:m.mime,len:m.len,parts:[]}; return; }
+  if(m.k==='pic0'){ picIn={id:m.id,mime:m.mime,len:m.len,frame:m.frame,vs:m.vs,parts:[]}; return; }
   if(m.id!==picIn.id)return;
   if(m.k==='picp'){ picIn.parts.push(m.b); return; }
   var s=atob(picIn.parts.join('')), u8=new Uint8Array(s.length);
@@ -174,7 +203,7 @@ function steer(){
         if(!v.muted){ v.muted=true; log({k:'muted-again',said:'this screen will not start sound on its own'}); }
       });
     }
-    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; pic.style.display='none'; }
+    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; pic.style.display='none'; sharp.style.display='none'; }
     if(lag>JUMP && Date.now()-lastSkip>SETTLE*1000){
       /* SKIP ONTO A KEYFRAME, AND LET IT SETTLE (N1110). C17, 24 Sep, a film with sound: 60
          skips in twelve minutes, each one landing wherever the buffer ended - so the stick had
@@ -205,7 +234,7 @@ steer();
 function finish(said){
   if(done)return; done=true;
   try{ v.pause(); }catch(e){}
-  live=false; idle.style.display=''; pic.style.display='none';
+  live=false; idle.style.display=''; pic.style.display='none'; sharp.style.display='none';
   say(said||'CIA stopped sending');
   log({k:'bye',said:said});
 }
@@ -292,6 +321,7 @@ try{
     if(first)caps();
     if(m.k==='offer'){ if(!pic.src||pic.style.display==='none')say('Connecting to CIA'); answer(m.sdp); }
     else if(m.k==='pic0'||m.k==='picp'||m.k==='pic1'){ picPart(m); }
+    else if(m.k==='view'){ onView(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
   });
