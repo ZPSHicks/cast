@@ -45,10 +45,13 @@ function caps(){
      this screen began opening the page: Google's receiver code arriving, ours, Cast started, and the
      first word from CIA. Its own line, because the desk keeps only 400 characters of each. */
   var s={k:'start',first:Math.round(performance.now()),started:startedAt};
+  /* each as asked, first byte, arrived - a late ask is the screen busy, a late byte the network (MiBox,
+     5 Nov: the page in 0.2 s, Google's code and our logo only at 12.8) */
+  var t=function(r){ return [Math.round(r.startTime),Math.round(r.responseStart),Math.round(r.responseEnd)]; };
   try{ performance.getEntriesByType('resource').forEach(function(r){
-    if(/cast_receiver_framework/.test(r.name))s.google=Math.round(r.responseEnd);
-    else if(/receiver\.js/.test(r.name))s.ours=Math.round(r.responseEnd);
-    else if(/logo\.png/.test(r.name))s.logo=Math.round(r.responseEnd);
+    if(/cast_receiver_framework/.test(r.name))s.google=t(r);
+    else if(/receiver\.js/.test(r.name))s.ours=t(r);
+    else if(/logo\.png/.test(r.name))s.logo=t(r);
   }); var n=performance.getEntriesByType('navigation')[0]; if(n)s.page=Math.round(n.responseEnd); }catch(e){}
   log(s);
 }
