@@ -24,7 +24,7 @@ var TARGET=+(Q.get('target')||0.75), JUMP=+(Q.get('jump')||3.0), RATE=+(Q.get('r
 var SETTLE=+(Q.get('settle')||3.0), FAST=+(Q.get('fast')||0.5);
 var v=document.getElementById('v'), st=document.getElementById('st');
 var idle=document.getElementById('idle'), idlesay=document.getElementById('idlesay');
-var ctx=null, sender=null, heard={};
+var ctx=null, sender=null, heard={}, gone=null;
 
 function say(t){ idlesay.textContent=t; }
 /* everything this page wants to report goes back to CIA inside the Cast connection */
@@ -333,6 +333,8 @@ try{
     var first=!heard[e.senderId];
     heard[e.senderId]=1; sender=e.senderId;
     if(first)caps();
+    /* how long the screen stood alone before a phone came back, and why it went (Kim, 5 Nov) */
+    if(first&&gone){ log({k:'alone',s:Math.round((Date.now()-gone.t)/1000),why:gone.why}); gone=null; }
     if(m.k==='offer'){ if(!pic.src||pic.style.display==='none')say('Connecting to CIA'); answer(m.sdp); }
     else if(m.k==='pic0'||m.k==='picp'||m.k==='pic1'){ picPart(m); }
     else if(m.k==='view'){ onView(m); }
@@ -340,10 +342,14 @@ try{
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
   });
   ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED,function(e){
+    gone={t:Date.now(),why:String(e.reason||'')};
     if(e.senderId===sender && !done && live)finish('CIA disconnected');
   });
   var opts=new cast.framework.CastReceiverOptions();
   opts.disableIdleTimeout=true;
+  /* A PHONE IN ANOTHER APP MAY GO QUIET FOR MINUTES (Kim, 5 Nov: "at least 10 min"). The screen keeps it
+     counted as connected for ten minutes of silence rather than ten seconds. */
+  opts.maxInactivity=600;
   opts.skipPlayersLoad=true;
   opts.statusText='Interstellar Marines';
   opts.customNamespaces={};
