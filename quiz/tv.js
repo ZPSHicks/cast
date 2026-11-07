@@ -129,6 +129,12 @@
     vs:function(){ tone(110,0,.9,'sawtooth',.3,55); noise(0,.9,.4,400); tone(880,.5,.3,'square',.12); },
     ding:function(){ tone(1568,0,.6,'sine',.3); },
     lose:function(){ [392,370,349,330].forEach(function(f,i){ tone(f,i*.35,.4,'triangle',.3); }); },
+    /* the rimshot: ba-dum… tss */
+    rimshot:function(){ tone(180,0,.12,'sine',.5,120); tone(140,.14,.14,'sine',.5,90); noise(.14,.08,.5,6000);
+      var a=A(); if(!a)return; var n=a.sampleRate*.9, b=a.createBuffer(1,n,a.sampleRate), d=b.getChannelData(0);
+      for(var i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);
+      var s=a.createBufferSource(); s.buffer=b; var f=a.createBiquadFilter(); f.type='highpass'; f.frequency.value=6000;
+      var g=a.createGain(); g.gain.value=.45; s.connect(f); f.connect(g); g.connect(a.destination); s.start(a.currentTime+.38); },
     /* the air horn: three blasts of a fat detuned chord */
     horn:function(){ [0,.32,.64].forEach(function(t,i){ var d=i===2?.9:.24; [311,370,466].forEach(function(f){ tone(f,t,d,'sawtooth',.16); tone(f*1.01,t,d,'sawtooth',.12); }); }); },
     /* the sad trombone */
@@ -352,6 +358,23 @@
       show('<div class="dim" style="font:900 30px Inter;letter-spacing:.2em">VINDER AF DUELLEN</div><div style="margin:30px 0">'+card(m.w,'big2')+'</div>'+
         '<div class="big" style="font-size:60px;margin-top:40px">'+m.sw+' – '+m.sl+'</div>'); sfx('fanfare'); confetti(50);
       if(m.flawless){ root.appendChild(h('<div class="stamp">TOTAL YDMYGELSE</div>')); setTimeout(function(){ sfx('trombone'); var s=root.querySelector('.stamp'); if(s)setTimeout(function(){ s.remove(); },4200); },1300); }
+    },
+    /* ROAST TIME: the names flash past, slow down and land on the victim */
+    roastpick:function(m){
+      var el=show('<div class="big pink" style="font-size:120px;text-shadow:0 0 50px #ff3d7f">ROAST-TID</div>'+
+        '<div class="big" id="rp" style="font-size:110px;margin-top:40px;height:120px">…</div>'), rp=el.querySelector('#rp');
+      var n=m.names, i=0, steps=26, k=0;
+      (function spin(){ var x=n[i++%n.length]; if(k===steps-1)x={name:m.pick,c:(n.filter(function(y){ return y.name===m.pick; })[0]||{}).c};
+        rp.textContent=x.name; rp.style.color=x.c; sfx('tick'); k++;
+        if(k<steps)setTimeout(spin,60+k*k*0.6); else { sfx('drum'); rp.style.transform='scale(1.3)'; rp.style.transition='transform .4s'; } })();
+    },
+    roast:function(m){
+      show('<div style="position:absolute;inset:0;background:radial-gradient(35% 60% at 50% 38%,#fff3 0%,#fff1 40%,transparent 70%)"></div>'+
+        '<div class="crownph" style="'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 90px '+m.p.c+'"></div>'+
+        '<div class="big" style="font-size:96px;margin-top:26px;color:'+m.p.c+'">'+esc(m.p.name)+'</div>'+
+        '<div class="big pink" style="font-size:44px;margin-top:6px;letter-spacing:.2em">BLIVER ROASTET</div>'+
+        '<svg viewBox="0 0 60 120" width="70" height="140" style="position:absolute;right:120px;bottom:90px"><rect x="18" y="0" width="24" height="44" rx="12" fill="#c7b3e6"/><rect x="27" y="44" width="6" height="60" fill="#888"/><rect x="12" y="104" width="36" height="8" rx="4" fill="#888"/></svg>');
+      sfx('whoosh');
     },
     streak:function(m){
       var f=h('<div class="fire"><b>I FULD FLAMME</b><i>'+esc(m.name)+' · '+m.n+' I TRÆK</i></div>');
