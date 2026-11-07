@@ -360,6 +360,21 @@ setInterval(function(){
   segs=0; asegs=0; bytes=0; appends=0; appendMs=0;
 },2000);
 
+/* ---- BANDEN QUIZ BORROWS THIS SCREEN (Kim, 7 Nov 2026: "just for this quiz") ----
+   Every message whose k starts with 'bq' goes to the quiz's own script, quiz/tv.js on this site,
+   loaded on the first one and fetched fresh like this file. CIA never sends one, so nothing of
+   CIA's changes. The quiz itself lives in Dropbox/Banden Quiz 2026. */
+var bqWait=null;
+function bq(m){
+  if(window.BQ){ window.BQ.on(m,tell); return; }
+  if(bqWait){ bqWait.push(m); return; }
+  bqWait=[m];
+  var s=document.createElement('script'); s.src='quiz/tv.js?v='+Date.now();
+  s.onload=function(){ var q=bqWait; bqWait=null; q.forEach(function(x){ window.BQ.on(x,tell); }); };
+  s.onerror=function(){ bqWait=null; log({k:'bqerr',e:'quiz/tv.js did not load'}); };
+  document.body.appendChild(s);
+}
+
 /* ---- Cast: the receiver side of the connection CIA opened ---- */
 try{
   ctx=cast.framework.CastReceiverContext.getInstance();
@@ -379,6 +394,7 @@ try{
     else if(m.k==='view'){ onView(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
+    else if(typeof m.k==='string'&&m.k.indexOf('bq')===0){ bq(m); }
   });
   ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED,function(e){
     gone={t:Date.now(),why:String(e.reason||'')};
