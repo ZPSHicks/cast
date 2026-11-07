@@ -30,7 +30,7 @@
   '@keyframes bqin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}'+
   '.big{font-family:Anton,Impact,sans-serif;letter-spacing:.02em;line-height:1}'+
   '.gold{color:#ffcf4a}.pink{color:#ff3d7f}.dim{color:#c7b3e6}'+
-  '#bqsub{position:absolute;left:80px;right:80px;bottom:34px;text-align:center;font:700 30px/1.3 Inter,system-ui;'+
+  '#bqsub{position:absolute;transform:translateZ(0);will-change:opacity;left:80px;right:80px;bottom:34px;text-align:center;font:700 30px/1.3 Inter,system-ui;'+
      'color:#fff;opacity:0;transition:opacity .3s;z-index:5}'+'#bqsub span{display:inline-block;padding:10px 22px;border-radius:14px;background:rgba(8,2,16,.88);box-shadow:0 0 0 2px #ffcf4a55}'+
   '#bqsub.on{opacity:1}'+
   '.card{width:200px;border-radius:18px;padding:10px 10px 14px;background:linear-gradient(160deg,#2d1650,#160a29);'+
@@ -157,12 +157,18 @@
     if(m.k==='bqsndp'){ s.parts.push(m.b); return; }
     if(m.k==='bqsnd1'){
       delete snd[m.id];
-      var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-      var bu=URL.createObjectURL(new Blob([u8],{type:s.mime||'audio/mpeg'}));
-      /* A LINE SENT AHEAD (Kim, 7 Nov: "a lot of pauses between the lines"): held until the phone says
-         play, so a whole roast can arrive while the wheel spins and then run back to back */
-      if(s.hold){ held[m.id]={url:bu,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id}); }
-      else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw);
+      /* PUT BACK TOGETHER BY THE BROWSER ITSELF (Kim, 7 Nov: still a judder): a letter-by-letter loop
+         in script held the old Chromecast's processor for a moment on every line and the voice playing
+         at the time stumbled; the browser's own decoder does it far faster */
+      var mime=s.mime||'audio/mpeg', ready=function(bu){
+        /* A LINE SENT AHEAD (Kim, 7 Nov: "a lot of pauses between the lines"): held until the phone says
+           play, so a whole roast can arrive first and then run back to back */
+        if(s.hold){ held[m.id]={url:bu,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id}); }
+        else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw); };
+      fetch('data:'+mime+';base64,'+s.parts.join('')).then(function(r){ return r.blob(); })
+        .then(function(b){ ready(URL.createObjectURL(b)); })
+        .catch(function(){ var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+          ready(URL.createObjectURL(new Blob([u8],{type:mime}))); });
     }
   }
   var held={};
@@ -455,7 +461,7 @@
     /* THE ROAST STAGE (Kim, 7 Nov): the victim on the left, the microphone in the middle, and on the
        right the roast itself, written out as a paragraph while Laura reads it. */
     roast:function(m){
-      var el=show('<div style="position:absolute;inset:0;background:radial-gradient(30% 55% at 50% 45%,#fff2 0%,#fff1 40%,transparent 70%)"></div>'+
+      var el=show('<div style="position:absolute;inset:0;transform:translateZ(0);background:radial-gradient(30% 55% at 50% 45%,#fff2 0%,#fff1 40%,transparent 70%)"></div>'+
         '<div style="position:absolute;left:50px;top:0;bottom:0;width:330px;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
           '<div class="crownph" style="width:280px;height:280px;'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 70px '+m.p.c+';display:flex;align-items:center;justify-content:center">'+
             (pics[m.p.id]?'':'<span style="font:180px Anton,Impact;color:'+m.p.c+'">'+esc(m.p.name[0])+'</span>')+'</div>'+
@@ -464,7 +470,7 @@
         '<svg viewBox="0 0 60 150" width="90" height="225" style="position:absolute;left:420px;top:50%;margin-top:-112px;filter:drop-shadow(0 0 20px #ffcf4a66)">'+
           '<rect x="15" y="0" width="30" height="54" rx="15" fill="#d9cdf0"/><g stroke="#8d7fb0" stroke-width="1.5"><line x1="15" y1="14" x2="45" y2="14"/><line x1="15" y1="24" x2="45" y2="24"/><line x1="15" y1="34" x2="45" y2="34"/></g>'+
           '<path d="M8 40 v6 a22 22 0 0 0 44 0 v-6" fill="none" stroke="#aaa" stroke-width="4"/><rect x="28" y="68" width="4" height="70" fill="#999"/><rect x="10" y="138" width="40" height="8" rx="4" fill="#999"/></svg>'+
-        '<div id="roastp" style="position:absolute;left:560px;right:50px;top:60px;bottom:60px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;'+
+        '<div id="roastp" style="position:absolute;transform:translateZ(0);will-change:contents;left:560px;right:50px;top:60px;bottom:60px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;'+
           'font:700 30px/1.35 Inter,system-ui"></div>');
       /* a still spotlight: no spinning lights on the roast stage, so the old Chromecast has breath for the voice */
       root.classList.add('calm'); sfx('whoosh');
