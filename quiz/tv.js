@@ -190,9 +190,10 @@
        couple of sound players at once; a new one per line, never released, left it playing silence from
        the third line on. The same element plays every line and lets go of each one when it ends. */
     var el=voicePlayer(), done=false, started=false, t0=Date.now(), dog=0;
-    var segs=phrasesOf(raw||text||''), cueT=0, shown=-1;
+    var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null;
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
       el.onplaying=el.onended=el.onerror=null; release(el);
+      if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
       sub.classList.remove('on'); duck(false); if(revoke)URL.revokeObjectURL(src);
       if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
     voiceCur=cur; voiceEl=el; el.volume=1; el.src=src;
@@ -200,10 +201,21 @@
       duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
       var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
+      /* on the roast stage the line is written into the paragraph on the right, phrase by phrase;
+         everywhere else it is the subtitle at the bottom */
+      var panel=document.getElementById('roastp');
+      if(panel&&segs.length){
+        [].forEach.call(panel.querySelectorAll('p'),function(p){ p.style.color='#a995c9'; });
+        para=document.createElement('p'); para.style.cssText='margin:0 0 16px;color:#fff';
+        para.innerHTML=segs.map(function(s){ return '<span style="opacity:.12;transition:opacity .25s">'+esc(s.t)+' </span>'; }).join('');
+        panel.appendChild(para);
+      }
       if(segs.length){
         var cue=function(){ var f=len?Math.min(1,el.currentTime/len):0, i=0;
           for(var k=0;k<segs.length;k++)if(segs[k].from<=f+0.02)i=k;
-          if(i!==shown){ shown=i; sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
+          if(i===shown)return; shown=i;
+          if(para){ [].forEach.call(para.children,function(s,n){ if(n<=i)s.style.opacity=1; }); }
+          else { sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
         cue(); if(len&&segs.length>1)cueT=setInterval(cue,100);
       }
       dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); };
@@ -421,13 +433,20 @@
         rp.textContent=x.name; rp.style.color=x.c; sfx('tick'); k++;
         if(k<steps)setTimeout(spin,60+k*k*0.6); else { sfx('drum'); rp.style.transform='scale(1.3)'; rp.style.transition='transform .4s'; } })();
     },
+    /* THE ROAST STAGE (Kim, 7 Nov): the victim on the left, the microphone in the middle, and on the
+       right the roast itself, written out as a paragraph while Laura reads it. */
     roast:function(m){
-      show('<div style="position:absolute;inset:0;background:radial-gradient(35% 60% at 50% 38%,#fff3 0%,#fff1 40%,transparent 70%)"></div>'+
-        '<div class="crownph" style="'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 90px '+m.p.c+';display:flex;align-items:center;justify-content:center">'+
-          (pics[m.p.id]?'':'<span style="font:200px Anton,Impact;color:'+m.p.c+'">'+esc(m.p.name[0])+'</span>')+'</div>'+
-        '<div class="big" style="font-size:96px;margin-top:26px;color:'+m.p.c+'">'+esc(m.p.name)+'</div>'+
-        '<div class="big pink" style="font-size:44px;margin-top:6px;letter-spacing:.2em">BLIVER ROASTET</div>'+
-        '<svg viewBox="0 0 60 120" width="70" height="140" style="position:absolute;right:120px;bottom:90px"><rect x="18" y="0" width="24" height="44" rx="12" fill="#c7b3e6"/><rect x="27" y="44" width="6" height="60" fill="#888"/><rect x="12" y="104" width="36" height="8" rx="4" fill="#888"/></svg>');
+      var el=show('<div style="position:absolute;inset:0;background:radial-gradient(30% 55% at 50% 45%,#fff2 0%,#fff1 40%,transparent 70%)"></div>'+
+        '<div style="position:absolute;left:50px;top:0;bottom:0;width:330px;display:flex;flex-direction:column;align-items:center;justify-content:center">'+
+          '<div class="crownph" style="width:280px;height:280px;'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 70px '+m.p.c+';display:flex;align-items:center;justify-content:center">'+
+            (pics[m.p.id]?'':'<span style="font:180px Anton,Impact;color:'+m.p.c+'">'+esc(m.p.name[0])+'</span>')+'</div>'+
+          '<div class="big" style="font-size:84px;margin-top:22px;color:'+m.p.c+'">'+esc(m.p.name)+'</div>'+
+          '<div class="big pink" style="font-size:34px;margin-top:6px;letter-spacing:.18em">BLIVER ROASTET</div></div>'+
+        '<svg viewBox="0 0 60 150" width="90" height="225" style="position:absolute;left:420px;top:50%;margin-top:-112px;filter:drop-shadow(0 0 20px #ffcf4a66)">'+
+          '<rect x="15" y="0" width="30" height="54" rx="15" fill="#d9cdf0"/><g stroke="#8d7fb0" stroke-width="1.5"><line x1="15" y1="14" x2="45" y2="14"/><line x1="15" y1="24" x2="45" y2="24"/><line x1="15" y1="34" x2="45" y2="34"/></g>'+
+          '<path d="M8 40 v6 a22 22 0 0 0 44 0 v-6" fill="none" stroke="#aaa" stroke-width="4"/><rect x="28" y="68" width="4" height="70" fill="#999"/><rect x="10" y="138" width="40" height="8" rx="4" fill="#999"/></svg>'+
+        '<div id="roastp" style="position:absolute;left:560px;right:50px;top:60px;bottom:60px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;'+
+          'font:700 30px/1.35 Inter,system-ui;-webkit-mask-image:linear-gradient(transparent,#000 22%)"></div>');
       sfx('whoosh');
     },
     streak:function(m){
