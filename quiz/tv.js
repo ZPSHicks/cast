@@ -80,8 +80,8 @@
   '.crownph .cr{position:absolute;left:50%;top:-150px;margin-left:-90px;animation:bqcrown 1.6s cubic-bezier(.3,1.4,.6,1) both .5s}'+
   '@keyframes bqcrown{from{transform:translateY(-500px) rotate(-30deg)}to{transform:translateY(40px) rotate(-8deg)}}'+
   '#bqyt{position:absolute;inset:0;z-index:3;background:#000;display:none}'+
-  '#bqyt.on{display:block}#bqyt .lbl{position:absolute;left:0;right:0;top:0;padding:14px;text-align:center;font:40px Anton;background:linear-gradient(#000d,transparent);z-index:2}'+
-  '#bqyt .cover{position:absolute;left:0;right:0;bottom:0;height:110px;background:linear-gradient(transparent,#000);z-index:2}';
+  '#bqyt.on{display:block}#bqyt .lbl{position:absolute;left:0;right:0;top:0;height:104px;box-sizing:border-box;padding:24px 14px 0;text-align:center;font:44px Anton;background:#000;z-index:2}'+
+  '#bqyt .cover{position:absolute;left:0;right:0;bottom:0;height:84px;background:#000;z-index:2}';
 
   function frame(){
     if(root)return;
@@ -170,7 +170,8 @@
   function stopSong(){ if(au){ au.pause(); au=null; } }
   function duck(on){ auVol=on?.25:1; if(au)au.volume=auVol; }
 
-  /* ---------- YouTube: the clip shows full screen, adverts and all ---------- */
+  /* ---------- YouTube: the clip shows full screen, adverts and all. Solid black bars top and bottom hide
+     YouTube's own title and channel strip (Kim, 7 Nov: the title must not show before the clip plays). ---------- */
   var yt=null, ytReady=false, ytWait=null, ytTick=0, ytLive=false;
   function loadYt(then){
     if(ytReady){ then(); return; }
