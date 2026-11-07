@@ -438,6 +438,12 @@
       show('<div class="big gold" style="font-size:64px;margin-bottom:20px">REGLERNE</div><div style="width:1100px">'+
         m.rules.map(function(r,i){ return '<div style="font:700 25px/1.3 Inter;margin:7px 0;animation:bqin .4s both '+(i*.25)+'s"><span class="gold">'+(i+1)+'.</span> '+esc(r)+'</div>'; }).join('')+'</div>');
     },
+    /* ONE RULE, BIG (Kim, 7 Nov: "don't show them all at once — it sounds like a bad presentation") */
+    rule:function(m){
+      show('<div class="dim" style="font:900 30px Inter;letter-spacing:.3em">REGEL '+m.n+' AF '+m.of+'</div>'+
+        '<div class="big" style="font-size:'+(m.text.length>70?64:78)+'px;line-height:1.08;text-align:center;max-width:1120px;margin-top:22px;text-shadow:0 0 30px #ff3d7f88">'+esc(m.text)+'</div>');
+      sfx('whoosh');
+    },
     round:function(m){
       show('<div class="dim" style="font:900 30px Inter;letter-spacing:.3em">'+esc(m.kicker||'')+'</div>'+
            '<div class="big gold" style="font-size:130px;text-shadow:0 0 50px #ff3d7f">'+esc(m.title)+'</div>'+
