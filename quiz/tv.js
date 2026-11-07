@@ -75,6 +75,17 @@
   '.bars{width:900px}.bars .r{display:flex;align-items:center;gap:14px;margin:10px 0;font:700 30px Inter}'+
   '.bars .r .nm{width:180px;font:36px Anton;color:var(--c)}.bars .r i{height:40px;border-radius:10px;background:var(--c);transition:width 1.2s ease-out;width:0}'+
   '.conf{position:absolute;top:-20px;width:14px;height:22px;animation:bqfall linear forwards}'+
+  /* over the top (Kim, 7 Nov: "a lot more over the top cringe, crazy, funny") */
+  '.fire{position:absolute;left:0;right:0;top:30%;text-align:center;z-index:4;animation:bqfire 3.4s ease-out both}'+
+  '.fire b{display:inline-block;font:110px/1 Anton,Impact;letter-spacing:.03em;color:#fff;padding:10px 40px;'+
+     'background:linear-gradient(0deg,#ff2a00,#ff8a00 45%,#ffe14a);border-radius:20px;box-shadow:0 0 60px #ff5a00,0 0 120px #ff2a00;transform:rotate(-4deg)}'+
+  '.fire i{display:block;font:900 40px Inter;margin-top:18px;color:#ffe14a;text-shadow:0 0 20px #ff5a00}'+
+  '@keyframes bqfire{0%{opacity:0;transform:scale(3)}10%{opacity:1;transform:scale(1)}15%{transform:scale(1.08)}20%{transform:scale(1)}85%{opacity:1}100%{opacity:0;transform:translateY(-40px)}}'+
+  '.stamp{position:absolute;left:50%;top:50%;z-index:4;margin:-80px 0 0 -460px;width:920px;text-align:center;font:120px/1 Anton,Impact;color:#ff3d7f;'+
+     'border:10px solid #ff3d7f;border-radius:20px;padding:20px 0;background:rgba(18,6,31,.85);transform:rotate(-12deg);animation:bqstamp .5s cubic-bezier(.2,1.6,.4,1) both 1.2s}'+
+  '@keyframes bqstamp{from{opacity:0;transform:rotate(-12deg) scale(4)}to{opacity:1;transform:rotate(-12deg) scale(1)}}'+
+  '.shake{animation:bqquake .5s linear}'+
+  '@keyframes bqquake{0%,100%{transform:none}20%{transform:translate(-14px,6px)}40%{transform:translate(12px,-8px)}60%{transform:translate(-8px,-4px)}80%{transform:translate(6px,8px)}}'+
   '@keyframes bqfall{to{transform:translateY(780px) rotate(720deg)}}'+
   '.crownph{position:relative;width:300px;height:300px;border-radius:24px;background:#000 center/cover;box-shadow:0 0 0 5px #ffcf4a,0 0 80px #ffcf4a88}'+
   '.crownph .cr{position:absolute;left:50%;top:-150px;margin-left:-90px;animation:bqcrown 1.6s cubic-bezier(.3,1.4,.6,1) both .5s}'+
@@ -117,9 +128,14 @@
     fanfare:function(){ [[523,0],[659,.18],[784,.36],[1047,.54],[784,.8],[1047,.98]].forEach(function(p){ tone(p[0],p[1],.3,'square',.18); tone(p[0]/2,p[1],.3,'triangle',.25); }); tone(1047,1.2,1.2,'square',.2); tone(1319,1.2,1.2,'triangle',.2); },
     vs:function(){ tone(110,0,.9,'sawtooth',.3,55); noise(0,.9,.4,400); tone(880,.5,.3,'square',.12); },
     ding:function(){ tone(1568,0,.6,'sine',.3); },
-    lose:function(){ [392,370,349,330].forEach(function(f,i){ tone(f,i*.35,.4,'triangle',.3); }); }
+    lose:function(){ [392,370,349,330].forEach(function(f,i){ tone(f,i*.35,.4,'triangle',.3); }); },
+    /* the air horn: three blasts of a fat detuned chord */
+    horn:function(){ [0,.32,.64].forEach(function(t,i){ var d=i===2?.9:.24; [311,370,466].forEach(function(f){ tone(f,t,d,'sawtooth',.16); tone(f*1.01,t,d,'sawtooth',.12); }); }); },
+    /* the sad trombone */
+    trombone:function(){ [[293,0,.45],[277,.5,.45],[261,1,.45],[247,1.5,1.3]].forEach(function(n){ tone(n[0],n[1],n[2],'sawtooth',.22,n[0]*(n[1]>=1.5?.94:1)); tone(n[0]/2,n[1],n[2],'triangle',.2); }); }
   };
   function sfx(n){ try{ SFX[n]&&SFX[n](); }catch(e){} }
+  function quake(){ if(!stage)return; stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
   function sndPart(m){
@@ -320,14 +336,14 @@
         setTimeout(function(){
           [].forEach.call(opts,function(o,i){ o.classList.add(i===m.ans?'right':'wrong'); });
           (m.picks||[]).forEach(function(p){ if(p.i==null)return; var o=opts[p.i]; if(!o)return; o.classList.remove('wrong'); var w=h('<span class="who" style="--c:'+p.c+'">'+esc(p.name)+'</span>'); o.appendChild(w); });
-          sfx(m.good?'right':'wrong');
+          sfx(m.good?'right':'wrong'); if(!m.good)quake();
           if(m.line)subtitle(m.line,6000);
         },1900);
       } else {
         show('<div class="dim" style="font:700 30px Inter">Svaret er</div><div class="big gold" style="font-size:'+(m.size||110)+'px;text-align:center;padding:0 40px">'+esc(m.answer)+'</div>'+
           (m.picks?'<div style="display:flex;gap:40px;margin-top:30px">'+m.picks.map(function(p){ return '<div style="font:700 34px Inter;color:'+p.c+'">'+esc(p.name)+': '+esc(p.v)+'</div>'; }).join('')+'</div>':'')+
           (m.line?'<div style="font:700 28px/1.3 Inter;margin-top:30px;max-width:1000px;text-align:center" class="dim">'+esc(m.line)+'</div>':''));
-        sfx(m.good?'right':'wrong');
+        sfx(m.good?'right':'wrong'); if(!m.good)quake();
       }
       stopSong(); cancelAnimationFrame(pixRaf); clearInterval(timerT); var tm=stage.querySelector('.timer'); if(tm)tm.textContent='';
       var c=stage.querySelector('.media canvas'); if(c&&m.img){ /* show the clean picture */ var im=new Image(); im.crossOrigin='anonymous'; im.onload=function(){ c.getContext('2d').drawImage(im,0,0,c.width,c.height); }; im.src=m.img; }
@@ -335,6 +351,11 @@
     duelend:function(m){
       show('<div class="dim" style="font:900 30px Inter;letter-spacing:.2em">VINDER AF DUELLEN</div><div style="margin:30px 0">'+card(m.w,'big2')+'</div>'+
         '<div class="big" style="font-size:60px;margin-top:40px">'+m.sw+' – '+m.sl+'</div>'); sfx('fanfare'); confetti(50);
+      if(m.flawless){ root.appendChild(h('<div class="stamp">TOTAL YDMYGELSE</div>')); setTimeout(function(){ sfx('trombone'); var s=root.querySelector('.stamp'); if(s)setTimeout(function(){ s.remove(); },4200); },1300); }
+    },
+    streak:function(m){
+      var f=h('<div class="fire"><b>I FULD FLAMME</b><i>'+esc(m.name)+' · '+m.n+' I TRÆK</i></div>');
+      root.appendChild(f); setTimeout(function(){ f.remove(); },3500); sfx('horn');
     },
     table:function(m){
       show('<div class="big gold" style="font-size:64px;margin-bottom:16px">'+esc(m.title||'STILLINGEN')+'</div><div class="tbl">'+
