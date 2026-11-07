@@ -495,6 +495,20 @@
     else if(k==='bqyt'){ if(m.stop)ytStop(); else ytPlay(m); }
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
     else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur,m.raw); }
+    /* THE SOUND TEST (Kim, 7 Nov: no voice on the Chromecast, though it reports playing). What this
+       screen knows about its own sound, and a line played through the effects engine instead. */
+    else if(k==='bqdiag'){
+      var o={e:'diag',ctx:ac?ac.state:'none'}; A(); o.ctx2=ac?ac.state:'none';
+      try{ var sv=cast.framework.CastReceiverContext.getInstance().getSystemVolume(); o.vol=sv&&sv.level; o.muted=sv&&sv.muted; }catch(e){ o.volErr=String(e); }
+      o.mediaEls=document.querySelectorAll('video,audio').length; say(o);
+    }
+    else if(k==='bqwa'){
+      /* a line through the effects engine: fetched, decoded and played by Web Audio */
+      fetch(m.url).then(function(r){ return r.arrayBuffer(); }).then(function(b){ return new Promise(function(ok,no){ A().decodeAudioData(b,ok,no); }); })
+        .then(function(buf){ var s=ac.createBufferSource(); s.buffer=buf; s.connect(ac.destination); s.start(); say({e:'waplay',len:buf.duration});
+          s.onended=function(){ say({e:'waend'}); }; })
+        .catch(function(e){ say({e:'wafail',m:String(e)}); });
+    }
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
     else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
