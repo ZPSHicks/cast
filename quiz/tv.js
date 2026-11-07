@@ -145,13 +145,13 @@
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
   function sndPart(m){
-    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text}; return; }
+    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw}; return; }
     var s=snd[m.id]; if(!s)return;
     if(m.k==='bqsndp'){ s.parts.push(m.b); return; }
     if(m.k==='bqsnd1'){
       delete snd[m.id];
       var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-      playVoice(URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'})),m.id,s.text,true);
+      playVoice(URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'})),m.id,s.text,true,0,s.raw);
     }
   }
   /* ONE LINE AT A TIME, AND THE WORDS ONLY WHILE THEY ARE SPOKEN (Kim, 7 Nov: subtitles showed with no
@@ -159,18 +159,45 @@
      reports how it went, and a line that never starts, or never ends, is called off rather than
      leaving the phone waiting. */
   var voiceCur=null;
-  function playVoice(src,id,text,revoke,dur){
+  /* SUBTITLES CUED TO THE VOICE (Kim, 7 Nov: "make sure the subs is cued to the speak"). A line is cut
+     into phrases at its punctuation; each phrase is weighted by its length, and the acting cues in
+     square brackets ([pause], [laughs] …) weigh as the silence they make. While the line plays, the
+     phrase whose share of the line Laura has reached is the one on screen. */
+  var CUE={'pause':10,'dramatic pause':16,'laughs':9,'chuckles':6,'sighs':7,'mock gasp':6};
+  function phrasesOf(raw){
+    var segs=[], gap=0;
+    String(raw).split(/(\[[^\]]*\])/).forEach(function(part){
+      var tag=/^\[([^\]]*)\]$/.exec(part);
+      if(tag){ gap+=CUE[tag[1].toLowerCase()]||3; return; }
+      (part.match(/[^.!?…,]+[.!?…,]*\s*/g)||[]).forEach(function(p){
+        var t=p.trim(); if(!t)return;
+        var last=segs[segs.length-1];
+        if(last&&!gap&&(last.t.length<18||t.length<8)){ last.t+=' '+t; last.w+=t.length; }
+        else { segs.push({t:t,w:t.length,gap:gap}); gap=0; }
+      });
+    });
+    var tot=0; segs.forEach(function(s){ s.from=tot+s.gap; tot+=s.gap+s.w; });
+    segs.forEach(function(s){ s.from/=tot||1; });
+    return segs;
+  }
+  function playVoice(src,id,text,revoke,dur,raw){
     if(voiceCur)voiceCur.stop('replaced');
     var el=new Audio(src), done=false, started=false, t0=Date.now(), dog=0;
-    var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); try{ el.pause(); }catch(e){}
+    var segs=phrasesOf(raw||text||''), cueT=0, shown=-1;
+    var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT); try{ el.pause(); }catch(e){}
       sub.classList.remove('on'); duck(false); if(revoke)URL.revokeObjectURL(src);
       if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
     voiceCur=cur; voiceEl=el; el.volume=1;
     el.addEventListener('playing',function(){ if(started)return; started=true; clearTimeout(dog);
-      if(text){ sub.innerHTML='<span>'+esc(text)+'</span>'; sub.classList.add('on'); }
       duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
       var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
+      if(segs.length){
+        var cue=function(){ var f=len?Math.min(1,el.currentTime/len):0, i=0;
+          for(var k=0;k<segs.length;k++)if(segs[k].from<=f+0.02)i=k;
+          if(i!==shown){ shown=i; sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
+        cue(); if(len&&segs.length>1)cueT=setInterval(cue,100);
+      }
       dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); });
     el.addEventListener('ended',function(){ cur.stop('ended'); });
     el.addEventListener('error',function(){ cur.stop('error '+(el.error&&el.error.code)); });
@@ -467,7 +494,7 @@
     else if(k==='bqsong'){ if(m.stop)stopSong(); else song(m); }
     else if(k==='bqyt'){ if(m.stop)ytStop(); else ytPlay(m); }
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
-    else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur); }
+    else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur,m.raw); }
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
     else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
