@@ -120,7 +120,7 @@
      hearing runs from the moment the quiz starts until the page closes, so it is always awake. */
   var awake=null;
   function keepAwake(){
-    if(awake||!ac)return;
+    if(awake||!ac||quiet)return;
     try{ var o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=40; g.gain.value=0.00002;
       o.connect(g); g.connect(ac.destination); o.start(); awake={o:o,g:g}; }catch(e){}
   }
@@ -159,7 +159,10 @@
     /* the sad trombone */
     trombone:function(){ [[293,0,.45],[277,.5,.45],[261,1,.45],[247,1.5,1.3]].forEach(function(n){ tone(n[0],n[1],n[2],'sawtooth',.22,n[0]*(n[1]>=1.5?.94:1)); tone(n[0]/2,n[1],n[2],'triangle',.2); }); }
   };
-  function sfx(n){ try{ SFX[n]&&SFX[n](); }catch(e){} }
+  /* QUIET (Kim, 7 Nov: "run all the audio through from the phone" to a Bluetooth speaker): the television
+     only shows; the phone makes every sound and tells this page when a line starts, for its words */
+  var quiet=false;
+  function sfx(n){ if(quiet)return; try{ SFX[n]&&SFX[n](); }catch(e){} }
   function quake(){ if(!stage)return; stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); }
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
@@ -236,15 +239,17 @@
        couple of sound players at once; a new one per line, never released, left it playing silence from
        the third line on. The same element plays every line and lets go of each one when it ends.
        A line already unpacked (buf) plays through the effects engine instead, which costs the stick less. */
-    var useBuf=!!(buf&&ac), el=useBuf?null:voicePlayer(), node=null, tStart=0, done=false, started=false, t0=Date.now(), dog=0;
+    /* src 'clock': no sound here at all — the phone is speaking; the words follow the clock */
+    var useClock=src==='clock', useBuf=!useClock&&!!(buf&&ac), el=(useBuf||useClock)?null:voicePlayer(), node=null, tStart=0, done=false, started=false, t0=Date.now(), dog=0;
     var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null, stalls=0;
     /* HOW BUSY THE STICK IS WHILE SHE SPEAKS (Kim, 7 Nov: the start of the roast judders, the end is clean):
        a clock that should tick every 50 ms; every tick that comes late is time the stick was busy elsewhere */
     var jank=0, lagMax=0, lagBig=0, lagLast=0;
-    var pos=function(){ return useBuf?Math.max(0,ac.currentTime-tStart):el.currentTime; };
+    var tClock=0;
+    var pos=function(){ return useClock?(Date.now()-tClock)/1000:(useBuf?Math.max(0,ac.currentTime-tStart):el.currentTime); };
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
       if(useBuf){ try{ node.onended=null; node.stop(); node.disconnect(); }catch(e){} }
-      else { el.onplaying=el.onended=el.onerror=el.onwaiting=el.onstalled=null; release(el); }
+      else if(el){ el.onplaying=el.onended=el.onerror=el.onwaiting=el.onstalled=null; release(el); }
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
       sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke&&/^blob:/.test(src))URL.revokeObjectURL(src);
       clearInterval(jank);
@@ -254,7 +259,7 @@
       lagLast=performance.now(); jank=setInterval(function(){ var n=performance.now(), lag=n-lagLast-50; lagLast=n; if(lag>lagMax)lagMax=lag; if(lag>80)lagBig++; },50);
       duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0,via:useBuf?'engine':'player'});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
-      var len=useBuf?buf.duration:(dur||((el.duration&&isFinite(el.duration))?el.duration:0));
+      var len=useBuf?buf.duration:(dur||((el&&el.duration&&isFinite(el.duration))?el.duration:0));
       /* on the roast stage the line is written into the paragraph on the right, phrase by phrase;
          everywhere else it is the subtitle at the bottom */
       var panel=document.getElementById('roastp');
@@ -273,6 +278,7 @@
         cue(); if(len&&segs.length>1)cueT=setInterval(cue,200);
       }
       dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+(useBuf?600:300):20000); };
+    if(useClock){ tClock=Date.now(); onStarted(); return; }
     if(useBuf){
       if(ac.state==='suspended')ac.resume();
       node=ac.createBufferSource(); node.buffer=buf; node.connect(ac.destination);
@@ -304,6 +310,7 @@
   /* ---------- songs: Deezer's public previews, no advert ---------- */
   var au=null, auVol=1;
   function song(m){
+    if(quiet)return;
     stopSong();
     var cb='bqdz'+Date.now(), t0=Date.now();
     window[cb]=function(r){
@@ -582,7 +589,7 @@
   window.BQ={on:function(m,t){
     tell=t; frame(); A();
     var k=m.k;
-    if(k==='bqstart'){ S.title({sub:m.sub||''}); say({e:'started',w:innerWidth,h:innerHeight}); }
+    if(k==='bqstart'){ quiet=!!m.quiet; if(quiet&&awake){ try{ awake.o.stop(); }catch(e){} awake=null; } S.title({sub:m.sub||''}); say({e:'started',w:innerWidth,h:innerHeight}); }
     else if(k==='bqscene'){ var f=S[m.s]; if(f){ try{ f(m); }catch(e){ say({e:'sceneerr',s:m.s,m:String(e)}); } } }
     else if(k==='bqsfx'){ sfx(m.n); }
     else if(k==='bqsub'){ subtitle(m.text,m.ms); }
@@ -591,6 +598,8 @@
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
     else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur,m.raw); }
     else if(k==='bqplay'){ playHeld(m.id); }
+    /* the phone has just started a line on the speaker: the words follow on screen by the clock */
+    else if(k==='bqcue'){ playVoice('clock',m.id,m.text,false,m.dur,m.raw); }
     else if(k==='bqbare'){ root.classList.toggle('bare',!!m.on); }
     /* THE SOUND TEST (Kim, 7 Nov: no voice on the Chromecast, though it reports playing). What this
        screen knows about its own sound, and a line played through the effects engine instead. */
