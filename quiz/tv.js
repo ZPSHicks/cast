@@ -145,13 +145,13 @@
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
   function sndPart(m){
-    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw}; return; }
+    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw,mime:m.mime}; return; }
     var s=snd[m.id]; if(!s)return;
     if(m.k==='bqsndp'){ s.parts.push(m.b); return; }
     if(m.k==='bqsnd1'){
       delete snd[m.id];
       var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-      playVoice(URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'})),m.id,s.text,true,0,s.raw);
+      playVoice(URL.createObjectURL(new Blob([u8],{type:s.mime||'audio/mpeg'})),m.id,s.text,true,0,s.raw);
     }
   }
   /* ONE LINE AT A TIME, AND THE WORDS ONLY WHILE THEY ARE SPOKEN (Kim, 7 Nov: subtitles showed with no
