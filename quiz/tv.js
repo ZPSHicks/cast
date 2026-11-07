@@ -151,14 +151,29 @@
     if(m.k==='bqsnd1'){
       delete snd[m.id];
       var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-      var url=URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'}));
-      if(voiceEl){ voiceEl.pause(); }
-      voiceEl=new Audio(url); voiceEl.volume=1;
-      if(s.text){ sub.innerHTML='<span>'+esc(s.text)+'</span>'; sub.classList.add('on'); }
-      duck(true);
-      voiceEl.onended=voiceEl.onerror=function(){ sub.classList.remove('on'); URL.revokeObjectURL(url); duck(false); say({e:'sndend',id:m.id}); };
-      voiceEl.play().catch(function(){ sub.classList.remove('on'); duck(false); say({e:'sndend',id:m.id,failed:1}); });
+      playVoice(URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'})),m.id,s.text,true);
     }
+  }
+  /* ONE LINE AT A TIME, AND THE WORDS ONLY WHILE THEY ARE SPOKEN (Kim, 7 Nov: subtitles showed with no
+     voice). The subtitle appears when the sound actually starts and goes when it ends. Every line
+     reports how it went, and a line that never starts, or never ends, is called off rather than
+     leaving the phone waiting. */
+  var voiceCur=null;
+  function playVoice(src,id,text,revoke){
+    if(voiceCur)voiceCur.stop('replaced');
+    var el=new Audio(src), done=false, started=false, t0=Date.now(), dog=0;
+    var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); try{ el.pause(); }catch(e){}
+      sub.classList.remove('on'); duck(false); if(revoke)URL.revokeObjectURL(src);
+      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
+    voiceCur=cur; voiceEl=el; el.volume=1;
+    el.addEventListener('playing',function(){ if(started)return; started=true; clearTimeout(dog);
+      if(text){ sub.innerHTML='<span>'+esc(text)+'</span>'; sub.classList.add('on'); }
+      duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
+      dog=setTimeout(function(){ cur.stop('overran'); },((el.duration&&isFinite(el.duration))?el.duration*1000:20000)+3000); });
+    el.addEventListener('ended',function(){ cur.stop('ended'); });
+    el.addEventListener('error',function(){ cur.stop('error '+(el.error&&el.error.code)); });
+    dog=setTimeout(function(){ cur.stop('never started'); },10000);
+    el.play().catch(function(e){ cur.stop('refused '+e.name); });
   }
   function subtitle(t,ms){ sub.innerHTML='<span>'+esc(t)+'</span>'; sub.classList.add('on'); clearTimeout(sub._t); sub._t=setTimeout(function(){ sub.classList.remove('on'); },ms||4000); }
 
@@ -450,6 +465,7 @@
     else if(k==='bqsong'){ if(m.stop)stopSong(); else song(m); }
     else if(k==='bqyt'){ if(m.stop)ytStop(); else ytPlay(m); }
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
+    else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false); }
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
     else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
