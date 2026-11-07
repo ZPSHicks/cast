@@ -57,7 +57,32 @@
   }
   function safe(f){ try{ var v=f(); return typeof v==='number'?Math.round(v*10)/10:v; }catch(e){ return null; } }
 
+  /* A SONG FROM DEEZER'S PUBLIC PREVIEWS: looked up here, on the television, so the address is
+     fresh (they expire), and played as plain sound - no player, no advert. */
+  var au=null;
+  function audio(m){
+    screen(); line('Musik: '+m.q);
+    var cb='bqdz'+Date.now(), t0=Date.now();
+    window[cb]=function(r){
+      delete window[cb];
+      var tr=r&&r.data&&r.data[0];
+      if(!tr||!tr.preview){ say({e:'dzmiss',q:m.q}); return; }
+      say({e:'dz',q:m.q,title:tr.title,artist:tr.artist&&tr.artist.name,ms:Date.now()-t0});
+      if(au){ au.pause(); }
+      au=new Audio(tr.preview); au.volume=1;
+      au.addEventListener('playing',function(){ say({e:'auplay',ms:Date.now()-t0}); });
+      au.addEventListener('error',function(){ say({e:'auerr',code:au.error&&au.error.code}); });
+      au.play().catch(function(e){ say({e:'aurefused',m:String(e)}); });
+      setTimeout(function(){ say({e:'aut',t:Math.round(au.currentTime*10)/10}); },6000);
+    };
+    var s=document.createElement('script');
+    s.src='https://api.deezer.com/search?q='+encodeURIComponent(m.q)+'&limit=1&output=jsonp&callback='+cb;
+    s.onerror=function(){ say({e:'dzfail'}); };
+    document.body.appendChild(s);
+  }
+
   function stop(){
+    if(au){ au.pause(); au=null; }
     clearInterval(tick);
     if(yt){ try{ yt.destroy(); }catch(e){} yt=null; }
     if(root){ root.remove(); root=null; }
@@ -69,5 +94,6 @@
     if(m.k==='bqstart'){ screen(); say({e:'started',w:innerWidth,h:innerHeight,ua:navigator.userAgent}); }
     else if(m.k==='bqyt'){ play(m); }
     else if(m.k==='bqstop'){ stop(); }
+    else if(m.k==='bqau'){ audio(m); }
   }};
 })();
