@@ -159,7 +159,7 @@
      reports how it went, and a line that never starts, or never ends, is called off rather than
      leaving the phone waiting. */
   var voiceCur=null;
-  function playVoice(src,id,text,revoke){
+  function playVoice(src,id,text,revoke,dur){
     if(voiceCur)voiceCur.stop('replaced');
     var el=new Audio(src), done=false, started=false, t0=Date.now(), dog=0;
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); try{ el.pause(); }catch(e){}
@@ -169,7 +169,9 @@
     el.addEventListener('playing',function(){ if(started)return; started=true; clearTimeout(dog);
       if(text){ sub.innerHTML='<span>'+esc(text)+'</span>'; sub.classList.add('on'); }
       duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
-      dog=setTimeout(function(){ cur.stop('overran'); },((el.duration&&isFinite(el.duration))?el.duration*1000:20000)+3000); });
+      /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
+      var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
+      dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); });
     el.addEventListener('ended',function(){ cur.stop('ended'); });
     el.addEventListener('error',function(){ cur.stop('error '+(el.error&&el.error.code)); });
     dog=setTimeout(function(){ cur.stop('never started'); },10000);
@@ -465,7 +467,7 @@
     else if(k==='bqsong'){ if(m.stop)stopSong(); else song(m); }
     else if(k==='bqyt'){ if(m.stop)ytStop(); else ytPlay(m); }
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
-    else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false); }
+    else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur); }
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
     else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
