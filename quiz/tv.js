@@ -21,6 +21,10 @@
   '#bq .rays{position:absolute;left:50%;top:40%;width:1500px;height:1500px;margin:-750px 0 0 -750px;opacity:.12;'+
      'background:repeating-conic-gradient(from 0deg,#ffcf4a 0deg 6deg,transparent 6deg 18deg);animation:bqspin 90s linear infinite}'+
   '@keyframes bqspin{to{transform:rotate(360deg)}}'+
+  /* NO STUTTER (Kim, 7 Nov: "the sound plays, but it kind of stutters"): the 2013 Chromecast can't redraw
+     the spinning lights and keep the voice smooth at once, so the lights hold still while anyone speaks
+     and stay off on the roast stage */
+  '#bq.talking .rays{animation-play-state:paused}#bq.calm .rays{display:none}'+
   '#bqstage{position:absolute;inset:0}'+
   '.sc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:bqin .45s ease-out both}'+
   '@keyframes bqin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}'+
@@ -194,11 +198,11 @@
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
       el.onplaying=el.onended=el.onerror=null; release(el);
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
-      sub.classList.remove('on'); duck(false); if(revoke)URL.revokeObjectURL(src);
+      sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke)URL.revokeObjectURL(src);
       if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
     voiceCur=cur; voiceEl=el; el.volume=1; el.src=src;
     el.onplaying=function(){ if(started)return; started=true; clearTimeout(dog);
-      duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
+      duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
       var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
       /* on the roast stage the line is written into the paragraph on the right, phrase by phrase;
@@ -207,7 +211,7 @@
       if(panel&&segs.length){
         [].forEach.call(panel.querySelectorAll('p'),function(p){ p.style.color='#a995c9'; });
         para=document.createElement('p'); para.style.cssText='margin:0 0 16px;color:#fff';
-        para.innerHTML=segs.map(function(s){ return '<span style="opacity:.12;transition:opacity .25s">'+esc(s.t)+' </span>'; }).join('');
+        para.innerHTML=segs.map(function(s){ return '<span style="opacity:.12">'+esc(s.t)+' </span>'; }).join('');
         panel.appendChild(para);
       }
       if(segs.length){
@@ -216,7 +220,7 @@
           if(i===shown)return; shown=i;
           if(para){ [].forEach.call(para.children,function(s,n){ if(n<=i)s.style.opacity=1; }); }
           else { sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
-        cue(); if(len&&segs.length>1)cueT=setInterval(cue,100);
+        cue(); if(len&&segs.length>1)cueT=setInterval(cue,200);
       }
       dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); };
     el.onended=function(){ cur.stop('ended'); };
@@ -335,7 +339,7 @@
       '<div class="nm">'+esc(p.name)+'</div><div class="ty">'+esc(p.type)+' · '+esc(p.nick||'')+'</div>'+
       (p.title?'<div class="tt">'+esc(p.title)+'</div>':'')+st+'</div>';
   }
-  function show(html){ clearInterval(timerT); var el=h('<div class="sc">'+html+'</div>'); stage.innerHTML=''; stage.appendChild(el); return el; }
+  function show(html){ clearInterval(timerT); root.classList.remove('calm'); var el=h('<div class="sc">'+html+'</div>'); stage.innerHTML=''; stage.appendChild(el); return el; }
   function confetti(n){
     var cols=['#ffcf4a','#ff3d7f','#3de0ff','#7ef0a8','#b388ff'];
     for(var i=0;i<(n||90);i++){ var c=document.createElement('i'); c.className='conf';
@@ -446,8 +450,9 @@
           '<rect x="15" y="0" width="30" height="54" rx="15" fill="#d9cdf0"/><g stroke="#8d7fb0" stroke-width="1.5"><line x1="15" y1="14" x2="45" y2="14"/><line x1="15" y1="24" x2="45" y2="24"/><line x1="15" y1="34" x2="45" y2="34"/></g>'+
           '<path d="M8 40 v6 a22 22 0 0 0 44 0 v-6" fill="none" stroke="#aaa" stroke-width="4"/><rect x="28" y="68" width="4" height="70" fill="#999"/><rect x="10" y="138" width="40" height="8" rx="4" fill="#999"/></svg>'+
         '<div id="roastp" style="position:absolute;left:560px;right:50px;top:60px;bottom:60px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;'+
-          'font:700 30px/1.35 Inter,system-ui;-webkit-mask-image:linear-gradient(transparent,#000 22%)"></div>');
-      sfx('whoosh');
+          'font:700 30px/1.35 Inter,system-ui"></div>');
+      /* a still spotlight: no spinning lights on the roast stage, so the old Chromecast has breath for the voice */
+      root.classList.add('calm'); sfx('whoosh');
     },
     streak:function(m){
       var f=h('<div class="fire"><b>I FULD FLAMME</b><i>'+esc(m.name)+' · '+m.n+' I TRÆK</i></div>');
