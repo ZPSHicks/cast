@@ -111,7 +111,17 @@
 
   /* ---------- sound effects, made here ---------- */
   var ac=null;
-  function A(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); return ac; }
+  function A(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } if(ac&&ac.state==='suspended')ac.resume(); keepAwake(); return ac; }
+  /* THE SOUND LINE NEVER SLEEPS (Kim, 7 Nov: every roast judders for its first forty seconds after a
+     cast, then runs clean; the stick measured itself idle the whole time). The old Chromecast's sound
+     output winds down when nothing plays and takes a while to settle when woken; a tone far below
+     hearing runs from the moment the quiz starts until the page closes, so it is always awake. */
+  var awake=null;
+  function keepAwake(){
+    if(awake||!ac)return;
+    try{ var o=ac.createOscillator(), g=ac.createGain(); o.frequency.value=40; g.gain.value=0.00002;
+      o.connect(g); g.connect(ac.destination); o.start(); awake={o:o,g:g}; }catch(e){}
+  }
   function tone(f,t0,dur,type,vol,f2){
     var a=A(); if(!a)return; var o=a.createOscillator(), g=a.createGain(); o.type=type||'sine';
     o.frequency.setValueAtTime(f,a.currentTime+t0); if(f2)o.frequency.exponentialRampToValueAtTime(f2,a.currentTime+t0+dur);
