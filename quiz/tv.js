@@ -160,21 +160,28 @@
       /* PUT BACK TOGETHER BY THE BROWSER ITSELF (Kim, 7 Nov: still a judder): a letter-by-letter loop
          in script held the old Chromecast's processor for a moment on every line and the voice playing
          at the time stumbled; the browser's own decoder does it far faster */
-      var mime=s.mime||'audio/mpeg', ready=function(bu){
+      /* UNPACKED ON ARRIVAL (Kim, 7 Nov: "very close … optimise a bit more"): the line is decoded into
+         plain sound for the effects engine the moment it lands, so playing it later costs the stick
+         almost nothing; if decoding fails, the media player plays it as before */
+      var mime=s.mime||'audio/mpeg', b64=s.parts.join(''); s.parts=null;
+      var ready=function(bu,buf){
         /* A LINE SENT AHEAD (Kim, 7 Nov: "a lot of pauses between the lines"): held until the phone says
            play, so a whole roast can arrive first and then run back to back */
-        if(s.hold){ held[m.id]={url:bu,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id}); }
-        else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw); };
-      fetch('data:'+mime+';base64,'+s.parts.join('')).then(function(r){ return r.blob(); })
-        .then(function(b){ ready(URL.createObjectURL(b)); })
-        .catch(function(){ var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-          ready(URL.createObjectURL(new Blob([u8],{type:mime}))); });
+        if(s.hold){ held[m.id]={url:bu,buf:buf,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id,dec:buf?1:0}); }
+        else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw,buf); };
+      fetch('data:'+mime+';base64,'+b64).then(function(r){ return r.blob(); })
+        .then(function(b){
+          var bu=URL.createObjectURL(b);
+          return b.arrayBuffer().then(function(ab){ return new Promise(function(ok){ try{ A().decodeAudioData(ab,ok,function(){ ok(null); }); }catch(e){ ok(null); } }); })
+            .then(function(buf){ ready(bu,buf&&buf.numberOfChannels?buf:null); },function(){ ready(bu,null); }); })
+        .catch(function(){ var bin=atob(b64), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+          ready(URL.createObjectURL(new Blob([u8],{type:mime})),null); });
     }
   }
   var held={};
   function playHeld(id){
     var x=held[id]; if(!x){ say({e:'sndend',id:id,failed:1,why:'not here'}); return; }
-    delete held[id]; playVoice(x.url,id,x.text,true,x.dur||0,x.raw);
+    delete held[id]; playVoice(x.url,id,x.text,true,x.dur||0,x.raw,x.buf);
   }
   /* ONE LINE AT A TIME, AND THE WORDS ONLY WHILE THEY ARE SPOKEN (Kim, 7 Nov: subtitles showed with no
      voice). The subtitle appears when the sound actually starts and goes when it ends. Every line
@@ -206,24 +213,26 @@
     segs.forEach(function(s){ s.from/=tot||1; });
     return segs;
   }
-  function playVoice(src,id,text,revoke,dur,raw){
+  function playVoice(src,id,text,revoke,dur,raw,buf){
     if(voiceCur)voiceCur.stop('replaced');
     /* ONE PLAYER, REUSED (Kim, 7 Nov: the first lines played, then silence). The old Chromecast runs only a
        couple of sound players at once; a new one per line, never released, left it playing silence from
-       the third line on. The same element plays every line and lets go of each one when it ends. */
-    var el=voicePlayer(), done=false, started=false, t0=Date.now(), dog=0;
+       the third line on. The same element plays every line and lets go of each one when it ends.
+       A line already unpacked (buf) plays through the effects engine instead, which costs the stick less. */
+    var useBuf=!!(buf&&ac), el=useBuf?null:voicePlayer(), node=null, tStart=0, done=false, started=false, t0=Date.now(), dog=0;
     var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null, stalls=0;
+    var pos=function(){ return useBuf?Math.max(0,ac.currentTime-tStart):el.currentTime; };
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
-      el.onplaying=el.onended=el.onerror=null; release(el);
+      if(useBuf){ try{ node.onended=null; node.stop(); node.disconnect(); }catch(e){} }
+      else { el.onplaying=el.onended=el.onerror=el.onwaiting=el.onstalled=null; release(el); }
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
       sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke)URL.revokeObjectURL(src);
-      el.onwaiting=el.onstalled=null;
-      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls}); }};
-    voiceCur=cur; voiceEl=el; el.volume=1; el.src=src;
-    el.onplaying=function(){ if(started)return; started=true; clearTimeout(dog);
-      duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0});
+      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls,via:useBuf?'engine':'player'}); }};
+    voiceCur=cur;
+    var onStarted=function(){ if(started)return; started=true; clearTimeout(dog);
+      duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0,via:useBuf?'engine':'player'});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
-      var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
+      var len=useBuf?buf.duration:(dur||((el.duration&&isFinite(el.duration))?el.duration:0));
       /* on the roast stage the line is written into the paragraph on the right, phrase by phrase;
          everywhere else it is the subtitle at the bottom */
       var panel=document.getElementById('roastp');
@@ -234,14 +243,24 @@
         panel.appendChild(para);
       }
       if(segs.length){
-        var cue=function(){ var f=len?Math.min(1,el.currentTime/len):0, i=0;
+        var cue=function(){ var f=len?Math.min(1,pos()/len):0, i=0;
           for(var k=0;k<segs.length;k++)if(segs[k].from<=f+0.02)i=k;
           if(i===shown)return; shown=i;
           if(para){ [].forEach.call(para.children,function(s,n){ if(n<=i)s.style.opacity=1; }); }
           else { sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
         cue(); if(len&&segs.length>1)cueT=setInterval(cue,200);
       }
-      dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); };
+      dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+(useBuf?600:300):20000); };
+    if(useBuf){
+      if(ac.state==='suspended')ac.resume();
+      node=ac.createBufferSource(); node.buffer=buf; node.connect(ac.destination);
+      node.onended=function(){ cur.stop('ended'); };
+      tStart=ac.currentTime+0.05; node.start(tStart);
+      setTimeout(onStarted,50);
+      return;
+    }
+    voiceEl=el; el.volume=1; el.src=src;
+    el.onplaying=onStarted;
     el.onended=function(){ cur.stop('ended'); };
     el.onerror=function(){ cur.stop('error '+(el.error&&el.error.code)); };
     /* every hiccup counted, so a judder can be told from the log */
