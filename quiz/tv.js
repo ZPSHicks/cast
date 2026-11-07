@@ -169,8 +169,10 @@
            play, so a whole roast can arrive first and then run back to back */
         if(s.hold){ held[m.id]={url:bu,buf:buf,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id,dec:buf?1:0}); }
         else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw,buf); };
-      /* sound test C: the player reads the line straight from its packed text, no in-memory file */
-      if(s.asdata){ ready('data:'+mime+';base64,'+b64,null); return; }
+      /* THE CLEAN ROUTE (sound test at the hut, 16:27): the same line played from an in-memory file, or
+         streamed like the songs, stuttered; read by the player straight from its packed text it ran
+         perfectly smooth. Every voice line goes that way now. */
+      ready('data:'+mime+';base64,'+b64,null); return;
       fetch('data:'+mime+';base64,'+b64).then(function(r){ return r.blob(); })
         .then(function(b){
           var bu=URL.createObjectURL(b);
