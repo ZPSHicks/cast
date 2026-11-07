@@ -100,6 +100,9 @@
 
   function frame(){
     if(root)return;
+    /* CIA's own video player sits idle on this page holding one of the old Chromecast's few sound
+       channels; the quiz doesn't use it, so it lets it go (CIA's next cast reloads the page anyway) */
+    var cv=document.getElementById('v'); if(cv){ try{ cv.pause(); cv.removeAttribute('src'); cv.load(); }catch(e){} }
     var st=document.createElement('style'); st.textContent=CSS; document.head.appendChild(st);
     root=h('<div id="bq"><div class="rays"></div><div id="bqstage"></div><div id="bqyt"><div class="lbl"></div><div id="bqytp"></div><div class="cover"></div></div><div id="bqsub"></div></div>');
     document.body.appendChild(root);
@@ -149,14 +152,23 @@
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
   function sndPart(m){
-    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw,mime:m.mime,dur:m.dur}; return; }
+    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw,mime:m.mime,dur:m.dur,hold:m.hold}; return; }
     var s=snd[m.id]; if(!s)return;
     if(m.k==='bqsndp'){ s.parts.push(m.b); return; }
     if(m.k==='bqsnd1'){
       delete snd[m.id];
       var bin=atob(s.parts.join('')), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
-      playVoice(URL.createObjectURL(new Blob([u8],{type:s.mime||'audio/mpeg'})),m.id,s.text,true,s.dur||0,s.raw);
+      var bu=URL.createObjectURL(new Blob([u8],{type:s.mime||'audio/mpeg'}));
+      /* A LINE SENT AHEAD (Kim, 7 Nov: "a lot of pauses between the lines"): held until the phone says
+         play, so a whole roast can arrive while the wheel spins and then run back to back */
+      if(s.hold){ held[m.id]={url:bu,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id}); }
+      else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw);
     }
+  }
+  var held={};
+  function playHeld(id){
+    var x=held[id]; if(!x){ say({e:'sndend',id:id,failed:1,why:'not here'}); return; }
+    delete held[id]; playVoice(x.url,id,x.text,true,x.dur||0,x.raw);
   }
   /* ONE LINE AT A TIME, AND THE WORDS ONLY WHILE THEY ARE SPOKEN (Kim, 7 Nov: subtitles showed with no
      voice). The subtitle appears when the sound actually starts and goes when it ends. Every line
@@ -194,12 +206,13 @@
        couple of sound players at once; a new one per line, never released, left it playing silence from
        the third line on. The same element plays every line and lets go of each one when it ends. */
     var el=voicePlayer(), done=false, started=false, t0=Date.now(), dog=0;
-    var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null;
+    var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null, stalls=0;
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
       el.onplaying=el.onended=el.onerror=null; release(el);
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
       sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke)URL.revokeObjectURL(src);
-      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
+      el.onwaiting=el.onstalled=null;
+      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls}); }};
     voiceCur=cur; voiceEl=el; el.volume=1; el.src=src;
     el.onplaying=function(){ if(started)return; started=true; clearTimeout(dog);
       duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0});
@@ -225,6 +238,8 @@
       dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); };
     el.onended=function(){ cur.stop('ended'); };
     el.onerror=function(){ cur.stop('error '+(el.error&&el.error.code)); };
+    /* every hiccup counted, so a judder can be told from the log */
+    stalls=0; el.onwaiting=el.onstalled=function(){ stalls++; };
     dog=setTimeout(function(){ cur.stop('never started'); },10000);
     el.play().catch(function(e){ cur.stop('refused '+e.name); });
   }
@@ -528,6 +543,7 @@
     else if(k==='bqyt'){ if(m.stop)ytStop(); else ytPlay(m); }
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
     else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur,m.raw); }
+    else if(k==='bqplay'){ playHeld(m.id); }
     /* THE SOUND TEST (Kim, 7 Nov: no voice on the Chromecast, though it reports playing). What this
        screen knows about its own sound, and a line played through the effects engine instead. */
     else if(k==='bqdiag'){
