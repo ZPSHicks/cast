@@ -370,7 +370,8 @@
     },
     roast:function(m){
       show('<div style="position:absolute;inset:0;background:radial-gradient(35% 60% at 50% 38%,#fff3 0%,#fff1 40%,transparent 70%)"></div>'+
-        '<div class="crownph" style="'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 90px '+m.p.c+'"></div>'+
+        '<div class="crownph" style="'+ph(m.p.id)+';box-shadow:0 0 0 5px '+m.p.c+',0 0 90px '+m.p.c+';display:flex;align-items:center;justify-content:center">'+
+          (pics[m.p.id]?'':'<span style="font:200px Anton,Impact;color:'+m.p.c+'">'+esc(m.p.name[0])+'</span>')+'</div>'+
         '<div class="big" style="font-size:96px;margin-top:26px;color:'+m.p.c+'">'+esc(m.p.name)+'</div>'+
         '<div class="big pink" style="font-size:44px;margin-top:6px;letter-spacing:.2em">BLIVER ROASTET</div>'+
         '<svg viewBox="0 0 60 120" width="70" height="140" style="position:absolute;right:120px;bottom:90px"><rect x="18" y="0" width="24" height="44" rx="12" fill="#c7b3e6"/><rect x="27" y="44" width="6" height="60" fill="#888"/><rect x="12" y="104" width="36" height="8" rx="4" fill="#888"/></svg>');
