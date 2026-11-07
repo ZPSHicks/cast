@@ -152,7 +152,7 @@
 
   /* ---------- the quizmaster's voice: mp3 sent from the phone in pieces ---------- */
   function sndPart(m){
-    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw,mime:m.mime,dur:m.dur,hold:m.hold}; return; }
+    if(m.k==='bqsnd0'){ snd[m.id]={parts:[],text:m.text,raw:m.raw,mime:m.mime,dur:m.dur,hold:m.hold,asdata:m.asdata}; return; }
     var s=snd[m.id]; if(!s)return;
     if(m.k==='bqsndp'){ s.parts.push(m.b); return; }
     if(m.k==='bqsnd1'){
@@ -169,11 +169,14 @@
            play, so a whole roast can arrive first and then run back to back */
         if(s.hold){ held[m.id]={url:bu,buf:buf,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id,dec:buf?1:0}); }
         else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw,buf); };
+      /* sound test C: the player reads the line straight from its packed text, no in-memory file */
+      if(s.asdata){ ready('data:'+mime+';base64,'+b64,null); return; }
       fetch('data:'+mime+';base64,'+b64).then(function(r){ return r.blob(); })
         .then(function(b){
           var bu=URL.createObjectURL(b);
-          return b.arrayBuffer().then(function(ab){ return new Promise(function(ok){ try{ A().decodeAudioData(ab,ok,function(){ ok(null); }); }catch(e){ ok(null); } }); })
-            .then(function(buf){ ready(bu,buf&&buf.numberOfChannels?buf:null); },function(){ ready(bu,null); }); })
+          /* the effects engine judders worse than the media player on the old Chromecast (hut test,
+             16:20), so lines go back to the player; decoding stays off */
+          ready(bu,null); })
         .catch(function(){ var bin=atob(b64), u8=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
           ready(URL.createObjectURL(new Blob([u8],{type:mime})),null); });
     }
@@ -226,7 +229,7 @@
       if(useBuf){ try{ node.onended=null; node.stop(); node.disconnect(); }catch(e){} }
       else { el.onplaying=el.onended=el.onerror=el.onwaiting=el.onstalled=null; release(el); }
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
-      sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke)URL.revokeObjectURL(src);
+      sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke&&/^blob:/.test(src))URL.revokeObjectURL(src);
       if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls,via:useBuf?'engine':'player'}); }};
     voiceCur=cur;
     var onStarted=function(){ if(started)return; started=true; clearTimeout(dog);
