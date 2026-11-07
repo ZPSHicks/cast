@@ -167,7 +167,7 @@
       var ready=function(bu,buf){
         /* A LINE SENT AHEAD (Kim, 7 Nov: "a lot of pauses between the lines"): held until the phone says
            play, so a whole roast can arrive first and then run back to back */
-        if(s.hold){ held[m.id]={url:bu,buf:buf,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id,dec:buf?1:0}); }
+        if(s.hold){ held[m.id]={url:bu,buf:buf,text:s.text,raw:s.raw,dur:s.dur}; say({e:'sndready',id:m.id,dec:buf?1:0,q:Object.keys(snd).length}); }
         else playVoice(bu,m.id,s.text,true,s.dur||0,s.raw,buf); };
       /* THE CLEAN ROUTE (sound test at the hut, 16:27): the same line played from an in-memory file, or
          streamed like the songs, stuttered; read by the player straight from its packed text it ran
@@ -226,15 +226,20 @@
        A line already unpacked (buf) plays through the effects engine instead, which costs the stick less. */
     var useBuf=!!(buf&&ac), el=useBuf?null:voicePlayer(), node=null, tStart=0, done=false, started=false, t0=Date.now(), dog=0;
     var segs=phrasesOf(raw||text||''), cueT=0, shown=-1, para=null, stalls=0;
+    /* HOW BUSY THE STICK IS WHILE SHE SPEAKS (Kim, 7 Nov: the start of the roast judders, the end is clean):
+       a clock that should tick every 50 ms; every tick that comes late is time the stick was busy elsewhere */
+    var jank=0, lagMax=0, lagBig=0, lagLast=0;
     var pos=function(){ return useBuf?Math.max(0,ac.currentTime-tStart):el.currentTime; };
     var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
       if(useBuf){ try{ node.onended=null; node.stop(); node.disconnect(); }catch(e){} }
       else { el.onplaying=el.onended=el.onerror=el.onwaiting=el.onstalled=null; release(el); }
       if(para)[].forEach.call(para.children,function(x){ x.style.opacity=1; });
       sub.classList.remove('on'); duck(false); if(root)root.classList.remove('talking'); if(revoke&&/^blob:/.test(src))URL.revokeObjectURL(src);
-      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls,via:useBuf?'engine':'player'}); }};
+      clearInterval(jank);
+      if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0,stalls:stalls,via:useBuf?'engine':'player',lagMax:Math.round(lagMax),lagBig:lagBig,busy:Object.keys(snd).length}); }};
     voiceCur=cur;
     var onStarted=function(){ if(started)return; started=true; clearTimeout(dog);
+      lagLast=performance.now(); jank=setInterval(function(){ var n=performance.now(), lag=n-lagLast-50; lagLast=n; if(lag>lagMax)lagMax=lag; if(lag>80)lagBig++; },50);
       duck(true); root.classList.add('talking'); say({e:'sndplay',id:id,ms:Date.now()-t0,via:useBuf?'engine':'player'});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
       var len=useBuf?buf.duration:(dur||((el.duration&&isFinite(el.duration))?el.duration:0));
