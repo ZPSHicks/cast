@@ -158,7 +158,11 @@
      voice). The subtitle appears when the sound actually starts and goes when it ends. Every line
      reports how it went, and a line that never starts, or never ends, is called off rather than
      leaving the phone waiting. */
-  var voiceCur=null;
+  var voiceCur=null, vPlayer=null, sPlayer=null;
+  function voicePlayer(){ if(!vPlayer){ vPlayer=document.createElement('audio'); vPlayer.preload='auto'; document.body.appendChild(vPlayer); } return vPlayer; }
+  function songPlayer(){ if(!sPlayer){ sPlayer=document.createElement('audio'); sPlayer.preload='auto'; document.body.appendChild(sPlayer); } return sPlayer; }
+  /* hands the sound back to the Chromecast: stop, forget the source, and reload empty */
+  function release(el){ try{ el.pause(); el.removeAttribute('src'); el.load(); }catch(e){} }
   /* SUBTITLES CUED TO THE VOICE (Kim, 7 Nov: "make sure the subs is cued to the speak"). A line is cut
      into phrases at its punctuation; each phrase is weighted by its length, and the acting cues in
      square brackets ([pause], [laughs] …) weigh as the silence they make. While the line plays, the
@@ -182,13 +186,17 @@
   }
   function playVoice(src,id,text,revoke,dur,raw){
     if(voiceCur)voiceCur.stop('replaced');
-    var el=new Audio(src), done=false, started=false, t0=Date.now(), dog=0;
+    /* ONE PLAYER, REUSED (Kim, 7 Nov: the first lines played, then silence). The old Chromecast runs only a
+       couple of sound players at once; a new one per line, never released, left it playing silence from
+       the third line on. The same element plays every line and lets go of each one when it ends. */
+    var el=voicePlayer(), done=false, started=false, t0=Date.now(), dog=0;
     var segs=phrasesOf(raw||text||''), cueT=0, shown=-1;
-    var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT); try{ el.pause(); }catch(e){}
+    var cur={stop:function(why){ if(done)return; done=true; clearTimeout(dog); clearInterval(cueT);
+      el.onplaying=el.onended=el.onerror=null; release(el);
       sub.classList.remove('on'); duck(false); if(revoke)URL.revokeObjectURL(src);
       if(voiceCur===cur)voiceCur=null; say({e:'sndend',id:id,failed:started?0:1,why:why,ms:Date.now()-t0}); }};
-    voiceCur=cur; voiceEl=el; el.volume=1;
-    el.addEventListener('playing',function(){ if(started)return; started=true; clearTimeout(dog);
+    voiceCur=cur; voiceEl=el; el.volume=1; el.src=src;
+    el.onplaying=function(){ if(started)return; started=true; clearTimeout(dog);
       duck(true); say({e:'sndplay',id:id,ms:Date.now()-t0});
       /* the old Chromecast doesn't always fire 'ended'; the line's own length closes it instead */
       var len=dur||((el.duration&&isFinite(el.duration))?el.duration:0);
@@ -198,9 +206,9 @@
           if(i!==shown){ shown=i; sub.innerHTML='<span>'+esc(segs[i].t)+'</span>'; sub.classList.add('on'); } };
         cue(); if(len&&segs.length>1)cueT=setInterval(cue,100);
       }
-      dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); });
-    el.addEventListener('ended',function(){ cur.stop('ended'); });
-    el.addEventListener('error',function(){ cur.stop('error '+(el.error&&el.error.code)); });
+      dog=setTimeout(function(){ cur.stop(len?'by length':'overran'); },len?len*1000+300:20000); };
+    el.onended=function(){ cur.stop('ended'); };
+    el.onerror=function(){ cur.stop('error '+(el.error&&el.error.code)); };
     dog=setTimeout(function(){ cur.stop('never started'); },10000);
     el.play().catch(function(e){ cur.stop('refused '+e.name); });
   }
@@ -223,9 +231,10 @@
     window[cb]=function(r){
       delete window[cb];
       if(!r||!r.preview){ say({e:'songfail',id:m.deezer}); return; }
-      au=new Audio(r.preview); au.volume=auVol;
-      au.addEventListener('playing',function(){ say({e:'songplay',id:m.deezer,ms:Date.now()-t0}); },{once:true});
-      au.addEventListener('ended',function(){ say({e:'songend',id:m.deezer}); });
+      /* the one music player, reused (see voicePlayer) */
+      au=songPlayer(); au.volume=auVol; au.src=r.preview;
+      var told=false; au.onplaying=function(){ if(told)return; told=true; say({e:'songplay',id:m.deezer,ms:Date.now()-t0}); };
+      au.onended=function(){ say({e:'songend',id:m.deezer}); };
       au.play().catch(function(e){ say({e:'songfail',id:m.deezer,m:String(e)}); });
     };
     var s=document.createElement('script');
@@ -233,7 +242,7 @@
     s.onerror=function(){ say({e:'songfail',id:m.deezer}); };
     document.body.appendChild(s);
   }
-  function stopSong(){ if(au){ au.pause(); au=null; } }
+  function stopSong(){ if(au){ au.onplaying=au.onended=null; release(au); au=null; } }
   function duck(on){ auVol=on?.25:1; if(au)au.volume=auVol; }
 
   /* ---------- YouTube: the clip shows full screen, adverts and all. Solid black bars top and bottom hide
@@ -510,7 +519,7 @@
         .catch(function(e){ say({e:'wafail',m:String(e)}); });
     }
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
-    else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
+    else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceCur)voiceCur.stop('stopped'); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
     /* CAN THIS SCREEN SPEAK? (Kim, 7 Nov: "make the phone play the voice to the TV"). A page cannot hand
        the phone's own speech on, so if the television has a Danish voice of its own, it speaks instead. */
