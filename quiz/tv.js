@@ -25,6 +25,8 @@
      the spinning lights and keep the voice smooth at once, so the lights hold still while anyone speaks
      and stay off on the roast stage */
   '#bq.talking .rays{animation-play-state:paused}#bq.calm .rays{display:none}'+
+  /* the measurement's bare screen: nothing for the graphics chip to draw but black and plain text */
+  '#bq.bare{background:#000}#bq.bare .rays{display:none}#bq.bare *{box-shadow:none!important;text-shadow:none!important;filter:none!important;animation:none!important;transition:none!important;background-image:none!important}'+
   '#bqstage{position:absolute;inset:0}'+
   '.sc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:bqin .45s ease-out both}'+
   '@keyframes bqin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}'+
@@ -589,6 +591,7 @@
     else if(k==='bqsnd0'||k==='bqsndp'||k==='bqsnd1'){ sndPart(m); }
     else if(k==='bqsay'){ playVoice(m.url,m.id,m.text,false,m.dur,m.raw); }
     else if(k==='bqplay'){ playHeld(m.id); }
+    else if(k==='bqbare'){ root.classList.toggle('bare',!!m.on); }
     /* THE SOUND TEST (Kim, 7 Nov: no voice on the Chromecast, though it reports playing). What this
        screen knows about its own sound, and a line played through the effects engine instead. */
     else if(k==='bqdiag'){
