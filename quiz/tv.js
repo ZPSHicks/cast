@@ -18,7 +18,7 @@
   '@import url("https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@500;700;900&display=swap");'+
   '#bq{position:absolute;inset:0;z-index:50;overflow:hidden;color:#fff;font-family:Inter,Roboto,system-ui,sans-serif;'+
      'background:radial-gradient(80% 90% at 50% 30%,#2b0f4a 0%,#12061f 60%,#07020d 100%)}'+
-  '#bq .rays{position:absolute;left:50%;top:40%;width:2200px;height:2200px;margin:-1100px 0 0 -1100px;opacity:.12;'+
+  '#bq .rays{position:absolute;left:50%;top:40%;width:1500px;height:1500px;margin:-750px 0 0 -750px;opacity:.12;'+
      'background:repeating-conic-gradient(from 0deg,#ffcf4a 0deg 6deg,transparent 6deg 18deg);animation:bqspin 90s linear infinite}'+
   '@keyframes bqspin{to{transform:rotate(360deg)}}'+
   '#bqstage{position:absolute;inset:0}'+
@@ -27,7 +27,7 @@
   '.big{font-family:Anton,Impact,sans-serif;letter-spacing:.02em;line-height:1}'+
   '.gold{color:#ffcf4a}.pink{color:#ff3d7f}.dim{color:#c7b3e6}'+
   '#bqsub{position:absolute;left:80px;right:80px;bottom:34px;text-align:center;font:700 30px/1.3 Inter,system-ui;'+
-     'color:#fff;text-shadow:0 2px 10px #000,0 0 3px #000;opacity:0;transition:opacity .3s;z-index:5}'+
+     'color:#fff;opacity:0;transition:opacity .3s;z-index:5}'+'#bqsub span{display:inline-block;padding:10px 22px;border-radius:14px;background:rgba(8,2,16,.88);box-shadow:0 0 0 2px #ffcf4a55}'+
   '#bqsub.on{opacity:1}'+
   '.card{width:200px;border-radius:18px;padding:10px 10px 14px;background:linear-gradient(160deg,#2d1650,#160a29);'+
      'box-shadow:0 0 0 3px var(--c),0 10px 30px rgba(0,0,0,.6);text-align:center}'+
@@ -39,7 +39,7 @@
   '.st{display:flex;align-items:center;gap:6px;font:700 11px Inter;color:#c7b3e6;margin-top:4px;text-align:left}'+
   '.st span{width:86px}.st i{flex:1;height:7px;border-radius:4px;background:#3a2560;overflow:hidden}'+
   '.st i b{display:block;height:100%;background:var(--c)}'+
-  '.card.big2{transform:scale(1.35)}'+
+  '.card.big2{transform:scale(1.25)}'+
   '.card.dim2{opacity:.35}'+
   '.q{position:absolute;left:60px;right:60px;top:40px;text-align:center;font:900 44px/1.15 Inter;text-shadow:0 3px 14px #000}'+
   '.opts{position:absolute;left:70px;right:70px;bottom:70px;display:grid;grid-template-columns:1fr 1fr;gap:16px}'+
@@ -70,14 +70,14 @@
   '.boom{position:absolute;inset:0;background:radial-gradient(circle,#fff 0%,#ffcf4a 20%,#ff3d7f 45%,transparent 70%);animation:bqboom 1.2s ease-out both}'+
   '@keyframes bqboom{from{transform:scale(.1);opacity:1}to{transform:scale(3);opacity:0}}'+
   '.tug{position:relative;width:1000px;height:40px;border-radius:20px;background:#2b1748;margin-top:40px}'+
-  '.tug .k{position:absolute;top:50%;width:110px;height:110px;margin:-55px 0 0 -55px;font-size:96px;line-height:110px;text-align:center;transition:left .9s cubic-bezier(.3,1.6,.5,1)}'+
+  '.tug .k{position:absolute;top:50%;width:100px;height:76px;margin:-48px 0 0 -50px;transition:left .9s cubic-bezier(.3,1.6,.5,1)}'+
   '.tug .t{position:absolute;top:0;bottom:0;width:4px;background:#ffcf4a55}'+
   '.bars{width:900px}.bars .r{display:flex;align-items:center;gap:14px;margin:10px 0;font:700 30px Inter}'+
   '.bars .r .nm{width:180px;font:36px Anton;color:var(--c)}.bars .r i{height:40px;border-radius:10px;background:var(--c);transition:width 1.2s ease-out;width:0}'+
   '.conf{position:absolute;top:-20px;width:14px;height:22px;animation:bqfall linear forwards}'+
   '@keyframes bqfall{to{transform:translateY(780px) rotate(720deg)}}'+
   '.crownph{position:relative;width:300px;height:300px;border-radius:24px;background:#000 center/cover;box-shadow:0 0 0 5px #ffcf4a,0 0 80px #ffcf4a88}'+
-  '.crownph .cr{position:absolute;left:50%;top:-150px;margin-left:-90px;font-size:150px;animation:bqcrown 1.6s cubic-bezier(.3,1.4,.6,1) both .5s}'+
+  '.crownph .cr{position:absolute;left:50%;top:-150px;margin-left:-90px;animation:bqcrown 1.6s cubic-bezier(.3,1.4,.6,1) both .5s}'+
   '@keyframes bqcrown{from{transform:translateY(-500px) rotate(-30deg)}to{transform:translateY(40px) rotate(-8deg)}}'+
   '#bqyt{position:absolute;inset:0;z-index:3;background:#000;display:none}'+
   '#bqyt.on{display:block}#bqyt .lbl{position:absolute;left:0;right:0;top:0;padding:14px;text-align:center;font:40px Anton;background:linear-gradient(#000d,transparent);z-index:2}'+
@@ -132,13 +132,13 @@
       var url=URL.createObjectURL(new Blob([u8],{type:'audio/mpeg'}));
       if(voiceEl){ voiceEl.pause(); }
       voiceEl=new Audio(url); voiceEl.volume=1;
-      if(s.text){ sub.textContent=s.text; sub.classList.add('on'); }
+      if(s.text){ sub.innerHTML='<span>'+esc(s.text)+'</span>'; sub.classList.add('on'); }
       duck(true);
       voiceEl.onended=voiceEl.onerror=function(){ sub.classList.remove('on'); URL.revokeObjectURL(url); duck(false); say({e:'sndend',id:m.id}); };
       voiceEl.play().catch(function(){ sub.classList.remove('on'); duck(false); say({e:'sndend',id:m.id,failed:1}); });
     }
   }
-  function subtitle(t,ms){ sub.textContent=t; sub.classList.add('on'); clearTimeout(sub._t); sub._t=setTimeout(function(){ sub.classList.remove('on'); },ms||4000); }
+  function subtitle(t,ms){ sub.innerHTML='<span>'+esc(t)+'</span>'; sub.classList.add('on'); clearTimeout(sub._t); sub._t=setTimeout(function(){ sub.classList.remove('on'); },ms||4000); }
 
   /* ---------- pictures (selfies) sent from the phone in pieces ---------- */
   var picIn={};
@@ -328,7 +328,7 @@
           (m.line?'<div style="font:700 28px/1.3 Inter;margin-top:30px;max-width:1000px;text-align:center" class="dim">'+esc(m.line)+'</div>':''));
         sfx(m.good?'right':'wrong');
       }
-      stopSong(); cancelAnimationFrame(pixRaf);
+      stopSong(); cancelAnimationFrame(pixRaf); clearInterval(timerT); var tm=stage.querySelector('.timer'); if(tm)tm.textContent='';
       var c=stage.querySelector('.media canvas'); if(c&&m.img){ /* show the clean picture */ var im=new Image(); im.crossOrigin='anonymous'; im.onload=function(){ c.getContext('2d').drawImage(im,0,0,c.width,c.height); }; im.src=m.img; }
     },
     duelend:function(m){
@@ -341,7 +341,7 @@
       sfx('whoosh');
     },
     bomb:function(m){
-      show('<div class="dim" style="font:900 28px Inter;letter-spacing:.2em">'+esc(m.kicker||'SEND BOMBEN VIDERE')+'</div><div class="bomb">💣</div>'+
+      show('<div class="dim" style="font:900 28px Inter;letter-spacing:.2em">'+esc(m.kicker||'SEND BOMBEN VIDERE')+'</div><div class="bomb"><svg viewBox="0 0 120 120" width="200" height="200"><circle cx="54" cy="70" r="42" fill="#2a1840" stroke="#ff3d7f" stroke-width="4"/><circle cx="40" cy="56" r="10" fill="#ffffff22"/><rect x="62" y="22" width="20" height="16" rx="3" transform="rotate(35 72 30)" fill="#5b3a8c"/><path d="M82 22 q10 -14 22 -8" stroke="#ffcf4a" stroke-width="4" fill="none"/><circle cx="106" cy="14" r="7" fill="#ffcf4a"><animate attributeName="r" values="5;9;5" dur=".3s" repeatCount="indefinite"/></circle></svg></div>'+
         '<div class="big" style="font-size:80px;color:'+m.c+'">'+esc(m.name)+'</div>'+
         '<div style="font:700 36px/1.25 Inter;margin-top:16px;max-width:1100px;text-align:center">'+esc(m.text||'')+'</div>');
       if(m.sfx)sfx(m.sfx);
@@ -368,15 +368,15 @@
       var pos=50+m.pos*(46/3);
       var el=show('<div class="big gold" style="font-size:70px">KRONEDUELLEN</div><div style="display:flex;width:1100px;justify-content:space-between;align-items:center;margin-top:30px">'+
         card(m.a)+'<div class="big pink" style="font-size:90px">VS</div>'+card(m.b)+'</div>'+
-        '<div class="tug"><div class="t" style="left:4%"></div><div class="t" style="left:96%"></div><div class="k" style="left:'+(m.prev!=null?50+m.prev*(46/3):pos)+'%">👑</div></div>');
+        '<div class="tug"><div class="t" style="left:4%"></div><div class="t" style="left:96%"></div><div class="k" style="left:'+(m.prev!=null?50+m.prev*(46/3):pos)+'%"><svg viewBox="0 0 120 90" width="100" height="76"><path d="M8 78 L16 22 L42 50 L60 8 L78 50 L104 22 L112 78 Z" fill="#ffcf4a" stroke="#b8860b" stroke-width="4" stroke-linejoin="round"/><rect x="8" y="72" width="104" height="12" rx="4" fill="#e0a800"/><circle cx="60" cy="56" r="7" fill="#ff3d7f"/><circle cx="34" cy="62" r="5" fill="#3de0ff"/><circle cx="86" cy="62" r="5" fill="#3de0ff"/></svg></div></div>');
       if(m.prev!=null&&m.prev!==m.pos)setTimeout(function(){ el.querySelector('.k').style.left=pos+'%'; sfx('whoosh'); },300);
     },
     crown:function(m){
-      show('<div class="crownph" style="'+ph(m.w.id)+'"><div class="cr">👑</div></div>'+
+      show('<div class="crownph" style="'+ph(m.w.id)+'"><div class="cr"><svg viewBox="0 0 120 90" width="180" height="135"><path d="M8 78 L16 22 L42 50 L60 8 L78 50 L104 22 L112 78 Z" fill="#ffcf4a" stroke="#b8860b" stroke-width="4" stroke-linejoin="round"/><rect x="8" y="72" width="104" height="12" rx="4" fill="#e0a800"/><circle cx="60" cy="56" r="7" fill="#ff3d7f"/><circle cx="34" cy="62" r="5" fill="#3de0ff"/><circle cx="86" cy="62" r="5" fill="#3de0ff"/></svg></div></div>'+
         '<div class="big gold" style="font-size:110px;margin-top:30px;text-shadow:0 0 40px #ff3d7f">'+esc(m.w.name)+'</div>'+
         '<div style="font:900 36px Inter;margin-top:8px">'+esc(m.title||'')+'</div>'+
         (m.court?'<div class="dim" style="font:700 24px Inter;margin-top:16px">Hoffet: '+esc(m.court)+'</div>':''));
-      sfx('drum'); setTimeout(function(){ sfx('fanfare'); confetti(160); },1700);
+      sfx('drum'); setTimeout(function(){ sfx('fanfare'); confetti(80); },1700);
     },
     awards:function(m){
       show('<div class="big gold" style="font-size:64px;margin-bottom:20px">PRISUDDELINGEN</div><div style="width:1100px">'+
