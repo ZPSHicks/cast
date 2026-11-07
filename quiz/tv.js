@@ -407,5 +407,20 @@
     else if(k==='bqpic0'||k==='bqpicp'||k==='bqpic1'){ picPart(m); }
     else if(k==='bqstop'){ stopSong(); ytStop(); if(voiceEl)voiceEl.pause(); if(root){ root.remove(); root=null; } say({e:'stopped'}); }
     else if(k==='bqping'){ say({e:'pong',t:m.t}); }
+    /* CAN THIS SCREEN SPEAK? (Kim, 7 Nov: "make the phone play the voice to the TV"). A page cannot hand
+       the phone's own speech on, so if the television has a Danish voice of its own, it speaks instead. */
+    else if(k==='bqvoices'){
+      var rep=function(){ var vs=window.speechSynthesis?speechSynthesis.getVoices():[];
+        say({e:'voices',has:!!window.speechSynthesis,n:vs.length,da:vs.filter(function(v){ return /^da/i.test(v.lang); }).map(function(v){ return v.name; }),list:vs.slice(0,30).map(function(v){ return v.lang; })}); };
+      if(window.speechSynthesis&&!speechSynthesis.getVoices().length){ speechSynthesis.onvoiceschanged=rep; setTimeout(rep,2500); } else rep();
+    }
+    else if(k==='bqtts'){
+      if(!window.speechSynthesis){ say({e:'ttsend',id:m.id,failed:1}); return; }
+      var u=new SpeechSynthesisUtterance(m.text), dv=speechSynthesis.getVoices().filter(function(v){ return /^da/i.test(v.lang); })[0];
+      if(dv)u.voice=dv; u.lang='da-DK'; u.rate=m.rate||1.08; u.pitch=m.pitch||1.05;
+      subtitle(m.text,Math.max(2500,m.text.length*75)); duck(true);
+      u.onend=u.onerror=function(ev){ duck(false); say({e:'ttsend',id:m.id,failed:ev&&ev.type==='error'?1:0}); };
+      speechSynthesis.speak(u);
+    }
   }};
 })();
