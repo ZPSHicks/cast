@@ -393,6 +393,7 @@ function filmStart(m){
   fv=document.createElement('video');
   fv.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
   fv.playsInline=true; fv.volume=m.vol!=null?+m.vol:1;
+  f.rate=+m.rate||1;
   document.body.appendChild(fv);
   idle.style.display='none';
   fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
@@ -410,6 +411,7 @@ function filmStart(m){
     filmTick();
   });
   fv.src=URL.createObjectURL(f.ms);
+  fv.defaultPlaybackRate=f.rate; fv.playbackRate=f.rate;   /* a load sets the speed back, so after it */
 }
 function filmStop(quiet){
   var f=film; film=null; fIn={};
@@ -517,6 +519,7 @@ function filmCtl(m){
   else if(m.op==='pause'){ f.play=false; fv.pause(); }
   else if(m.op==='seek'){ filmSeek(m.t); }
   else if(m.op==='loop'){ f.loop=!!m.v; }
+  else if(m.op==='rate'){ f.rate=Math.max(0.25,Math.min(2,+m.v||1)); fv.defaultPlaybackRate=f.rate; fv.playbackRate=f.rate; }
   else if(m.op==='vol'){ fv.volume=Math.max(0,Math.min(1,+m.v)); if(fv.volume>0)fv.muted=false; }
 }
 
