@@ -478,7 +478,11 @@ function filmTick(){
   else if(Date.now()-f.ask.t>15000){ log({k:'filmerr',e:'piece '+f.ask.n+' never came'}); delete f.have[f.ask.n]; f.ask=null; fIn={}; }
   /* the film has an end once its last piece is in hand up to here, or it waits at its final frame for ever;
      letting a piece go opens it again, so this is asked every tick */
-  if(f.ms.readyState==='open'&&!f.sb.updating&&!f.q.length&&!f.done&&f.have[f.np-1]===2&&ahead>0&&t+ahead>=f.dur-0.5){
+  /* judged by the stretch it plays in reaching the end, not by time in hand: a loop's start arriving in the last
+     second opened it again with nothing left ahead, and it never ended (12 Nov) */
+  var tail=false;
+  for(i=0;i<b.length;i++)if(b.start(i)<=t+0.05&&b.end(i)>=f.dur-0.5)tail=true;
+  if(f.ms.readyState==='open'&&!f.sb.updating&&!f.q.length&&!f.done&&f.have[f.np-1]===2&&tail){
     try{ f.ms.endOfStream(); }catch(e){}
   }
   /* it starts once there are four seconds in hand, or the rest of the film; after a pause, two */
