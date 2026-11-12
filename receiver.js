@@ -388,7 +388,7 @@ var film=null, fv=null, fIn={};
 function filmStart(m){
   filmStop(true);
   var f={id:m.id,dur:+m.dur||0,np:+m.np||Math.ceil((+m.dur||0)/2),codecs:String(m.codecs||'avc1.640028,mp4a.40.2'),
-         have:{},ask:null,seq:0,q:[],play:!m.paused,t0:Date.now(),first:0,stalls:0,said:0,bytes:0,retry:null,done:null};
+         have:{},ask:null,seq:0,q:[],play:!m.paused,loop:!!m.loop,t0:Date.now(),first:0,stalls:0,said:0,bytes:0,retry:null,done:null};
   film=f;
   fv=document.createElement('video');
   fv.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
@@ -397,7 +397,8 @@ function filmStart(m){
   idle.style.display='none';
   fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
   fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0}); } });
-  fv.addEventListener('ended',function(){ if(film===f)tell({k:'fend',id:f.id}); });
+  /* a looping film goes back to its start, which is kept in hand for it (Kim, 12 Nov: "loop does not work") */
+  fv.addEventListener('ended',function(){ if(film!==f)return; if(f.loop){ fv.currentTime=0; filmTick(); } else tell({k:'fend',id:f.id}); });
   f.ms=new MediaSource();
   f.ms.addEventListener('sourceopen',function(){
     if(film!==f||f.sb)return;                    /* it opens again after every end, when a piece is let go */
@@ -467,6 +468,8 @@ function filmTick(){
   if(!f.ask){
     var n=Math.floor(t/2);
     while(f.have[n])n++;
+    /* looping, and all of the rest is in hand: the first four seconds, before the end comes */
+    if(n>=f.np&&f.loop&&t+CUSH>f.dur){ n=0; while(n<2&&f.have[n])n++; if(n>=2)n=f.np; }
     if(n<f.np&&2*n<t+CUSH){
       f.have[n]=1; f.ask={n:n,seq:++f.seq,t:Date.now()};
       tell({k:'fneed',id:f.id,n:n,seq:f.seq});
@@ -485,7 +488,9 @@ function filmTick(){
   }
   /* let go of what is well behind, and of what lies far ahead after a scrub back */
   if(!f.sb.updating&&!f.q.length&&!f.done){
-    if(b.length&&b.start(0)<t-12){ var e1=t-8; try{ f.sb.remove(0,e1); }catch(x){} filmForget(f,0,e1); }
+    var keep=f.loop?4:0, s0=null;                 /* a looping film keeps its first four seconds */
+    for(i=0;i<b.length;i++){ var a0=Math.max(b.start(i),keep); if(a0<t-12&&b.end(i)>a0){ s0=a0; break; } }
+    if(s0!==null){ var e1=t-8; try{ f.sb.remove(s0,e1); }catch(x){} filmForget(f,s0,e1); }
     else if(b.length&&b.end(b.length-1)>t+CUSH+12){ var s1=t+CUSH+6; try{ f.sb.remove(s1,f.dur+10); }catch(x){} filmForget(f,s1,f.dur+10); }
   }
 }
@@ -507,6 +512,7 @@ function filmCtl(m){
   if(m.op==='play'){ f.play=true; if(fv.ended)filmSeek(0); filmTick(); }   /* play at the end starts it again */
   else if(m.op==='pause'){ f.play=false; fv.pause(); }
   else if(m.op==='seek'){ filmSeek(m.t); }
+  else if(m.op==='loop'){ f.loop=!!m.v; }
   else if(m.op==='vol'){ fv.volume=Math.max(0,Math.min(1,+m.v)); if(fv.volume>0)fv.muted=false; }
 }
 
