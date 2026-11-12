@@ -375,6 +375,141 @@ function bq(m){
   document.body.appendChild(s);
 }
 
+/* ---- A FILM FROM THE PHONE (N1512 step 4, D751, 12 Nov 2026) ----
+   The desk makes the film into pieces two seconds long, 1080p at about 4 Mbit/s with its sound, and
+   the phone passes each one on inside the Cast connection, which carried 9 to 12 Mbit/s to the
+   conference TV. This page asks for the pieces it needs, one at a time, keeping 20 seconds in hand
+   (a 2013 stick holds that easily), and plays them in a video of its own, so the desk's live cast
+   above is never touched. The phone is the remote: play, pause, scrub, volume; this page says where
+   it is every second. A scrub asks for the piece it landed in first; what lies far behind or far
+   ahead is let go. ?cushion= seconds, for testing. */
+var CUSH=+(Q.get('cushion')||20);
+var film=null, fv=null, fIn={};
+function filmStart(m){
+  filmStop(true);
+  var f={id:m.id,dur:+m.dur||0,np:+m.np||Math.ceil((+m.dur||0)/2),codecs:String(m.codecs||'avc1.640028,mp4a.40.2'),
+         have:{},ask:null,seq:0,q:[],play:!m.paused,t0:Date.now(),first:0,stalls:0,said:0,bytes:0,retry:null,done:null};
+  film=f;
+  fv=document.createElement('video');
+  fv.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
+  fv.playsInline=true; fv.volume=m.vol!=null?+m.vol:1;
+  document.body.appendChild(fv);
+  idle.style.display='none';
+  fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
+  fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0}); } });
+  fv.addEventListener('ended',function(){ if(film===f)tell({k:'fend',id:f.id}); });
+  f.ms=new MediaSource();
+  f.ms.addEventListener('sourceopen',function(){
+    if(film!==f||f.sb)return;                    /* it opens again after every end, when a piece is let go */
+    try{ f.sb=f.ms.addSourceBuffer('video/mp4; codecs="'+f.codecs+'"'); }
+    catch(e){ log({k:'filmerr',e:'sourcebuffer '+e,codecs:f.codecs}); tell({k:'fend',id:f.id,failed:'This television cannot play the film'}); return; }
+    try{ f.ms.duration=f.dur; }catch(e){}
+    f.sb.addEventListener('updateend',function(){ filmAppend(f); });
+    if(m.at>0)fv.currentTime=+m.at;
+    filmTick();
+  });
+  fv.src=URL.createObjectURL(f.ms);
+}
+function filmStop(quiet){
+  var f=film; film=null; fIn={};
+  if(fv){ try{ fv.pause(); }catch(e){} try{ URL.revokeObjectURL(fv.src); }catch(e){} fv.removeAttribute('src'); try{ fv.load(); }catch(e){} fv.remove(); fv=null; }
+  if(f&&!quiet)log({k:'filmstop',id:f.id,stalls:f.stalls,mb:Math.round(f.bytes/1e5)/10});
+  if(!quiet&&(!pic.src||pic.style.display==='none'))idle.style.display='';
+}
+/* the pieces arrive like a picture's parts, base64 inside the Cast connection */
+function filmPart(m){
+  var f=film; if(!f||m.id!==f.id)return;
+  if(m.k==='fp0'){ fIn={seq:m.seq,n:m.n,off:+m.off||0,parts:[]}; return; }
+  if(m.seq!==fIn.seq)return;
+  if(m.k==='fpp'){ fIn.parts.push(m.b); return; }
+  var s=atob(fIn.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  var p={n:fIn.n,off:fIn.off,u8:u8}; fIn={};
+  if(f.ask&&f.ask.seq===m.seq)f.ask=null;
+  f.bytes+=u8.length;
+  f.q.push(p); filmAppend(f);
+  filmTick();
+}
+function filmAppend(f){
+  if(film!==f||!f.sb||f.sb.updating)return;
+  if(f.done){ f.have[f.done.n]=2; f.done=null; }
+  if(f.retry){ var r=f.retry; f.retry=null; f.q.unshift(r); }
+  var p=f.q.shift(); if(!p)return;
+  try{ f.sb.timestampOffset=p.off; f.sb.appendBuffer(p.u8); f.done=p; }
+  catch(e){
+    /* full: let go of what is behind and try that piece again */
+    if(String(e).indexOf('Quota')>=0&&fv.currentTime>4){ f.retry=p; try{ f.sb.remove(0,fv.currentTime-2); }catch(x){} filmForget(f,0,fv.currentTime-2); }
+    else{ delete f.have[p.n]; log({k:'filmerr',e:'append '+e,n:p.n}); }
+  }
+}
+/* the pieces wholly inside a let-go stretch are asked for again if he comes back */
+function filmForget(f,a,b){
+  for(var k in f.have){ var n=+k; if(f.have[k]===2&&2*n>=a-0.1&&2*n+2<=b+0.1)delete f.have[k]; }
+}
+function filmSeek(t){
+  var f=film; if(!f)return;
+  t=Math.max(0,Math.min(f.dur-0.1,+t||0));
+  fv.currentTime=t;
+  /* a piece still on its way for somewhere else is not waited for */
+  if(f.ask&&Math.abs(2*f.ask.n-t)>CUSH){ delete f.have[f.ask.n]; f.ask=null; fIn={}; }
+  filmTick();
+}
+function filmTick(){
+  var f=film; if(!f||!f.sb)return;
+  var t=fv.currentTime, b=fv.buffered, ahead=0, nextS=null, i;
+  for(i=0;i<b.length;i++){
+    if(b.start(i)<=t+0.05&&b.end(i)>t)ahead=b.end(i)-t;
+    if(b.start(i)>t&&(nextS===null||b.start(i)<nextS))nextS=b.start(i);
+  }
+  /* a hair's gap between two makings, or before the first piece after a scrub: hop it */
+  if(ahead===0&&nextS!==null&&nextS-t<0.6){ fv.currentTime=nextS+0.01; t=nextS+0.01; ahead=0.01; }
+  /* the next piece it has not got, from where it plays, within the cushion */
+  if(!f.ask){
+    var n=Math.floor(t/2);
+    while(f.have[n])n++;
+    if(n<f.np&&2*n<t+CUSH){
+      f.have[n]=1; f.ask={n:n,seq:++f.seq,t:Date.now()};
+      tell({k:'fneed',id:f.id,n:n,seq:f.seq});
+    }
+  }
+  else if(Date.now()-f.ask.t>15000){ log({k:'filmerr',e:'piece '+f.ask.n+' never came'}); delete f.have[f.ask.n]; f.ask=null; fIn={}; }
+  /* the film has an end once its last piece is in hand up to here, or it waits at its final frame for ever;
+     letting a piece go opens it again, so this is asked every tick */
+  if(f.ms.readyState==='open'&&!f.sb.updating&&!f.q.length&&!f.done&&f.have[f.np-1]===2&&ahead>0&&t+ahead>=f.dur-0.5){
+    try{ f.ms.endOfStream(); }catch(e){}
+  }
+  /* it starts once there are four seconds in hand, or the rest of the film; after a pause, two */
+  if(f.play&&fv.paused&&!fv.ended&&ahead>0&&ahead>=Math.min(f.first?2:4,f.dur-t-0.2)){
+    var pr=fv.play();
+    if(pr&&pr.catch)pr.catch(function(err){ log({k:'play',e:String(err),muted:fv.muted}); if(!fv.muted){ fv.muted=true; } });
+  }
+  /* let go of what is well behind, and of what lies far ahead after a scrub back */
+  if(!f.sb.updating&&!f.q.length&&!f.done){
+    if(b.length&&b.start(0)<t-12){ var e1=t-8; try{ f.sb.remove(0,e1); }catch(x){} filmForget(f,0,e1); }
+    else if(b.length&&b.end(b.length-1)>t+CUSH+12){ var s1=t+CUSH+6; try{ f.sb.remove(s1,f.dur+10); }catch(x){} filmForget(f,s1,f.dur+10); }
+  }
+}
+setInterval(filmTick,250);
+/* where the film is, every second, to the phone; and how it went, every ten, to the desk's log */
+setInterval(function(){
+  var f=film; if(!f||!fv)return;
+  var b=fv.buffered, ahead=0;
+  for(var i=0;i<b.length;i++)if(b.start(i)<=fv.currentTime+0.05&&b.end(i)>fv.currentTime)ahead=b.end(i)-fv.currentTime;
+  tell({k:'fpos',id:f.id,t:+fv.currentTime.toFixed(2),dur:f.dur,paused:!f.play,wait:f.play&&fv.paused,ahead:+ahead.toFixed(1),vol:fv.volume});
+  if(++f.said%10===0){
+    var o={k:'filmtv',id:f.id,t:Math.round(fv.currentTime),ahead:+ahead.toFixed(1),stalls:f.stalls,mb:Math.round(f.bytes/1e5)/10,w:fv.videoWidth,h:fv.videoHeight};
+    try{ var pq=fv.getVideoPlaybackQuality(); o.dropped=pq.droppedVideoFrames; o.total=pq.totalVideoFrames; }catch(e){}
+    log(o);
+  }
+},1000);
+function filmCtl(m){
+  var f=film; if(!f||m.id!==f.id)return;
+  if(m.op==='play'){ f.play=true; if(fv.ended)filmSeek(0); filmTick(); }   /* play at the end starts it again */
+  else if(m.op==='pause'){ f.play=false; fv.pause(); }
+  else if(m.op==='seek'){ filmSeek(m.t); }
+  else if(m.op==='vol'){ fv.volume=Math.max(0,Math.min(1,+m.v)); if(fv.volume>0)fv.muted=false; }
+}
+
 /* ---- Cast: the receiver side of the connection CIA opened ---- */
 try{
   ctx=cast.framework.CastReceiverContext.getInstance();
@@ -392,12 +527,18 @@ try{
     if(m.k==='offer'){ if(!pic.src||pic.style.display==='none')say('Connecting to CIA'); answer(m.sdp); }
     else if(m.k==='pic0'||m.k==='picp'||m.k==='pic1'){ picPart(m); }
     else if(m.k==='view'){ onView(m); }
+    else if(m.k==='film'){ filmStart(m); }
+    else if(m.k==='fp0'||m.k==='fpp'||m.k==='fp1'){ filmPart(m); }
+    else if(m.k==='fctl'){ filmCtl(m); }
+    else if(m.k==='fstop'){ filmStop(); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
     else if(typeof m.k==='string'&&m.k.indexOf('bq')===0){ bq(m); }
   });
   ctx.addEventListener(cast.framework.system.EventType.SENDER_DISCONNECTED,function(e){
     gone={t:Date.now(),why:String(e.reason||'')};
+    /* the phone feeds the film, so with the phone gone it waits where it is (Kim, 12 Nov) */
+    if(film&&e.senderId===sender){ film.play=false; try{ fv.pause(); }catch(x){} }
     if(e.senderId===sender && !done && live)finish('CIA disconnected');
   });
   var opts=new cast.framework.CastReceiverOptions();
