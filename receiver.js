@@ -441,13 +441,18 @@ function filmAppend(f){
   try{ f.sb.timestampOffset=p.off; f.sb.appendBuffer(p.u8); f.done=p; }
   catch(e){
     /* full: let go of what is behind and try that piece again */
-    if(String(e).indexOf('Quota')>=0&&fv.currentTime>4){ f.retry=p; try{ f.sb.remove(0,fv.currentTime-2); }catch(x){} filmForget(f,0,fv.currentTime-2); }
+    if(String(e).indexOf('Quota')>=0&&fv.currentTime>4){ f.retry=p; var q1=filmEdge(fv.currentTime-2,false); try{ f.sb.remove(0,q1); }catch(x){} filmForget(f,0,q1); }
     else{ delete f.have[p.n]; log({k:'filmerr',e:'append '+e,n:p.n}); }
   }
 }
-/* the pieces wholly inside a let-go stretch are asked for again if he comes back */
+/* EVERY PIECE A LET-GO STRETCH TOUCHES is asked for again if he comes back, not only those wholly inside it
+   (Kim, 14 Nov: a looping 16 s clip, started over, stopped dead at 8 s for good). Letting go of half a piece
+   takes its whole picture with it, as the rest hangs on the frames let go, while the screen still counted
+   the piece as in hand and never asked for it again. So a stretch is also cut on a piece's edge: each piece
+   starts on the first frame at or after its even second. */
+function filmEdge(t,up){ return 2*(up?Math.ceil(t/2):Math.floor(t/2)); }
 function filmForget(f,a,b){
-  for(var k in f.have){ var n=+k; if(f.have[k]===2&&2*n>=a-0.1&&2*n+2<=b+0.1)delete f.have[k]; }
+  for(var k in f.have){ var n=+k; if(f.have[k]===2&&2*n<b-0.05&&2*n+2>a+0.05)delete f.have[k]; }
 }
 function filmSeek(t){
   var f=film; if(!f)return;
@@ -466,6 +471,9 @@ function filmTick(){
   }
   /* a hair's gap between two makings, or before the first piece after a scrub: hop it */
   if(ahead===0&&nextS!==null&&nextS-t<0.6){ fv.currentTime=nextS+0.01; t=nextS+0.01; ahead=0.01; }
+  /* nothing to play where it stands, yet that piece counted as in hand: it is not, so ask for it again */
+  var hn=Math.floor(t/2);
+  if(ahead===0&&f.have[hn]===2&&!f.sb.updating&&!f.q.length&&!f.done&&t<f.dur-0.6){ delete f.have[hn]; log({k:'filmerr',e:'piece '+hn+' was gone',t:+t.toFixed(2)}); }
   /* the next piece it has not got, from where it plays, within the cushion */
   if(!f.ask){
     var n=Math.floor(t/2);
@@ -496,8 +504,9 @@ function filmTick(){
   if(!f.sb.updating&&!f.q.length&&!f.done){
     var keep=f.loop?4:0, s0=null;                 /* a looping film keeps its first four seconds */
     for(i=0;i<b.length;i++){ var a0=Math.max(b.start(i),keep); if(a0<t-12&&b.end(i)>a0){ s0=a0; break; } }
-    if(s0!==null){ var e1=t-8; try{ f.sb.remove(s0,e1); }catch(x){} filmForget(f,s0,e1); }
-    else if(b.length&&b.end(b.length-1)>t+CUSH+12){ var s1=t+CUSH+6; try{ f.sb.remove(s1,f.dur+10); }catch(x){} filmForget(f,s1,f.dur+10); }
+    var e1=filmEdge(t-8,false);
+    if(s0!==null&&e1>s0){ try{ f.sb.remove(s0,e1); }catch(x){} filmForget(f,s0,e1); }
+    else if(b.length&&b.end(b.length-1)>t+CUSH+12){ var s1=filmEdge(t+CUSH+6,true); try{ f.sb.remove(s1,f.dur+10); }catch(x){} filmForget(f,s1,f.dur+10); }
   }
 }
 setInterval(filmTick,250);
