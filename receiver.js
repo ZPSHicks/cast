@@ -400,6 +400,14 @@ function filmStart(m){
   fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0}); } });
   /* a looping film goes back to its start, which is kept in hand for it (Kim, 12 Nov: "loop does not work") */
   fv.addEventListener('ended',function(){ if(film!==f)return; if(f.loop){ fv.currentTime=0; filmTick(); } else tell({k:'fend',id:f.id}); });
+  /* A FILM THE SCREEN CANNOT DECODE ENDS HERE, saying why (Kim, 16 Nov: the conference TV played Resurrection, 820 tall,
+     and refused Aliens and The Creator, 1080 tall, at their first frame, then asked for the same piece every second) */
+  fv.addEventListener('error',function(){
+    if(film!==f||f.dead)return; f.dead=1;
+    var er=fv.error||{};
+    log({k:'filmerr',e:'video error '+(er.code||'?')+' '+(er.message||''),id:f.id,w:fv.videoWidth,h:fv.videoHeight,t:+fv.currentTime.toFixed(2)});
+    tell({k:'fend',id:f.id,failed:'This television could not play the film ('+(er.message||('error '+(er.code||'?')))+')'});
+  });
   f.ms=new MediaSource();
   f.ms.addEventListener('sourceopen',function(){
     if(film!==f||f.sb)return;                    /* it opens again after every end, when a piece is let go */
@@ -434,7 +442,7 @@ function filmPart(m){
   filmTick();
 }
 function filmAppend(f){
-  if(film!==f||!f.sb||f.sb.updating)return;
+  if(film!==f||!f.sb||f.sb.updating||f.dead)return;
   if(f.done){ f.have[f.done.n]=2; f.done=null; }
   if(f.retry){ var r=f.retry; f.retry=null; f.q.unshift(r); }
   var p=f.q.shift(); if(!p)return;
@@ -463,7 +471,7 @@ function filmSeek(t){
   filmTick();
 }
 function filmTick(){
-  var f=film; if(!f||!f.sb)return;
+  var f=film; if(!f||!f.sb||f.dead)return;
   var t=fv.currentTime, b=fv.buffered, ahead=0, nextS=null, i;
   for(i=0;i<b.length;i++){
     if(b.start(i)<=t+0.05&&b.end(i)>t)ahead=b.end(i)-t;
