@@ -33,6 +33,30 @@ function log(o){ o.at='tv'; tell({k:'log',o:o}); }
 window.onerror=function(m,s,l){ log({k:'error',m:String(m),l:l}); say('Error: '+m); };
 window.onunhandledrejection=function(e){ log({k:'error',m:String(e.reason)}); };
 
+/* ALL ABOUT THIS SCREEN, for CIA's Screens page (Kim, 16 Nov: "a diag page that allows you to read all about the
+   cast tech in Conference"). Sent once a sender is heard; the sender keeps it, one file per screen. Each film size
+   is asked two ways: the Cast system's own "can this screen show it" (with size and frame rate), and the browser's
+   "can it decode it smoothly". */
+function screenReport(){
+  var r={v:1,ua:navigator.userAgent,screen:[screen.width,screen.height],page:[innerWidth,innerHeight],dpr:window.devicePixelRatio||1,
+         cores:navigator.hardwareConcurrency||0,memory:navigator.deviceMemory||0,cast:{},plays:[]};
+  try{ var dc=ctx.getDeviceCapabilities()||{}; for(var k in dc)r.cast[k]=dc[k]; }catch(e){ r.cast.error=String(e); }
+  var C=[['H.264','video/mp4','avc1.640028'],['H.264 high level','video/mp4','avc1.640033'],['HEVC','video/mp4','hev1.1.6.L150.B0'],
+         ['VP9','video/webm','vp09.00.50.08'],['AV1','video/mp4','av01.0.08M.08']];
+  var S=[[1280,720,30],[1920,820,24],[1920,1080,24],[1920,1080,30],[1920,1080,60],[3840,2160,30],[3840,2160,60]];
+  var jobs=[];
+  C.forEach(function(c){ S.forEach(function(s){
+    var row={codec:c[0],w:s[0],h:s[1],fps:s[2],show:null,decode:null,smooth:null,efficient:null};
+    try{ row.show=ctx.canDisplayType(c[1],c[2],s[0],s[1],s[2]); }catch(e){ row.show='?'; }
+    r.plays.push(row);
+    if(navigator.mediaCapabilities&&navigator.mediaCapabilities.decodingInfo){
+      jobs.push(navigator.mediaCapabilities.decodingInfo({type:'media-source',video:{contentType:c[1]+';codecs="'+c[2]+'"',
+        width:s[0],height:s[1],bitrate:s[1]>1100?16000000:5000000,framerate:s[2]}})
+        .then(function(d){ row.decode=!!d.supported; row.smooth=!!d.smooth; row.efficient=!!d.powerEfficient; },function(){ row.decode='?'; }));
+    }
+  }); });
+  Promise.all(jobs).then(function(){ tell({k:'screen',r:r}); },function(){ tell({k:'screen',r:r}); });
+}
 /* WHAT THIS TELEVISION CAN PLAY, reported once CIA is connected */
 function caps(){
   var want=['video/mp4;codecs="avc1.640028"','video/mp4;codecs="avc1.4d0028"','video/mp4;codecs="avc1.42e028"',
@@ -41,6 +65,7 @@ function caps(){
   want.forEach(function(x){ try{ c[x]=MediaSource.isTypeSupported(x); }catch(e){ c[x]='threw'; } });
   c.ua=navigator.userAgent; c.w=screen.width; c.h=screen.height; c.dpr=window.devicePixelRatio||1;
   log(c);
+  screenReport();
   /* WHERE THE START WENT (5 Nov: the MiBox takes far longer than C17). Milliseconds from the moment
      this screen began opening the page: Google's receiver code arriving, ours, Cast started, and the
      first word from CIA. Its own line, because the desk keeps only 400 characters of each. */
