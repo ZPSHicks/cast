@@ -454,6 +454,7 @@ function filmStop(quiet){
 }
 /* the pieces arrive like a picture's parts, base64 inside the Cast connection */
 function filmPart(m){
+  if(T&&m.id===T.id){ testPart(m); return; }
   var f=film; if(!f||m.id!==f.id)return;
   if(m.k==='fp0'){ fIn={seq:m.seq,n:m.n,off:+m.off||0,parts:[]}; return; }
   if(m.seq!==fIn.seq)return;
@@ -565,6 +566,67 @@ function filmCtl(m){
   else if(m.op==='vol'){ fv.volume=Math.max(0,Math.min(1,+m.v)); if(fv.volume>0)fv.muted=false; }
 }
 
+/* ---- THE SELF-TEST (Kim, 16 Nov: the conference TV refuses some films and no label shows why) ----
+   The phone names a list of pieces, each a differently made copy of the same two seconds. Each is played here
+   in a video of its own, muted, so one that breaks the player cannot break the next: it passes when it has
+   played a second and a half without an error. The results go back to the phone, which writes them on this
+   screen's card, and stand on the screen as a list. */
+var T=null, TIN={};
+function selfTest(m){
+  filmStop(true);
+  T={id:m.id,list:(m.list||[]).slice(),i:-1,out:[],codecs:String(m.codecs||'avc1.640028,mp4a.40.2'),seq:0};
+  idle.style.display='none';
+  T.box=document.createElement('div');
+  T.box.style.cssText='position:absolute;left:6%;top:8%;right:6%;color:#fff;font:600 26px/1.5 system-ui,sans-serif;text-shadow:0 2px 6px #000;z-index:5';
+  document.body.appendChild(T.box);
+  testNext();
+}
+function testDraw(){
+  if(!T||!T.box)return;
+  var h='<div style="font-size:30px;margin-bottom:12px">Testing this screen · '+T.out.length+' of '+T.list.length+'</div>';
+  T.out.forEach(function(r){ h+='<div>'+(r.ok?'<span style="color:#3fb950">Plays</span>':'<span style="color:#f85149">Refused</span>')+' · '+r.label+'</div>'; });
+  T.box.innerHTML=h;
+}
+function testNext(){
+  var t=T; if(!t)return;
+  if(t.v){ try{ t.v.pause(); }catch(e){} try{ URL.revokeObjectURL(t.v.src); }catch(e){} t.v.removeAttribute('src'); try{ t.v.load(); }catch(e){} t.v.remove(); t.v=null; }
+  t.i++; testDraw();
+  if(t.i>=t.list.length){ tell({k:'ftestdone',id:t.id,results:t.out}); log({k:'selftest',results:t.out.map(function(r){ return r.n+(r.ok?' ok':' no '+(r.err||'')); }).join(' | ')}); return; }
+  var it=t.list[t.i], r={n:it.n,label:it.label,ok:false,err:'',t:0,frames:0}, done=false;
+  var v=document.createElement('video'); t.v=v; v.muted=true; v.playsInline=true; v.disableRemotePlayback=true;
+  v.style.cssText='position:absolute;right:4%;bottom:6%;width:34%;background:#000;z-index:4';
+  document.body.appendChild(v);
+  var finish=function(){
+    if(done||T!==t)return; done=true; clearTimeout(t.tm); clearInterval(t.iv);
+    r.t=+v.currentTime.toFixed(2);
+    try{ r.frames=v.getVideoPlaybackQuality().totalVideoFrames; }catch(e){}
+    t.out.push(r); setTimeout(testNext,400);
+  };
+  v.addEventListener('error',function(){ var e=v.error||{}; r.err=(e.message||('error '+(e.code||'?'))); finish(); });
+  var ms=new MediaSource();
+  ms.addEventListener('sourceopen',function(){
+    if(T!==t||done)return;
+    try{ t.sb=ms.addSourceBuffer('video/mp4; codecs="'+t.codecs+'"'); }catch(e){ r.err='source '+e; finish(); return; }
+    t.sb.addEventListener('updateend',function(){ if(T!==t||done)return; var p=v.play(); if(p&&p.catch)p.catch(function(){}); });
+    t.want={n:it.n,seq:++t.seq,ms:ms,finish:finish,r:r};
+    tell({k:'fneed',id:t.id,n:it.n,seq:t.seq});
+  });
+  v.src=URL.createObjectURL(ms);
+  t.iv=setInterval(function(){ if(v.currentTime>=1.5&&!v.error){ r.ok=true; finish(); } },100);
+  t.tm=setTimeout(function(){ if(!r.err)r.err=v.currentTime>0?'stopped at '+v.currentTime.toFixed(1)+' s':'never started'; finish(); },12000);
+}
+function testPart(m){
+  var t=T; if(!t)return;
+  if(m.k==='fp0'){ TIN={seq:m.seq,n:m.n,parts:[]}; return; }
+  if(m.seq!==TIN.seq)return;
+  if(m.k==='fpp'){ TIN.parts.push(m.b); return; }
+  var s=atob(TIN.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  TIN={};
+  if(!t.want||t.want.seq!==m.seq||!t.sb)return;
+  try{ t.sb.timestampOffset=0; t.sb.appendBuffer(u8); }catch(e){ t.want.r.err='append '+e; t.want.finish(); }
+}
+
 /* ---- Cast: the receiver side of the connection CIA opened ---- */
 try{
   ctx=cast.framework.CastReceiverContext.getInstance();
@@ -582,7 +644,8 @@ try{
     if(m.k==='offer'){ if(!pic.src||pic.style.display==='none')say('Connecting to CIA'); answer(m.sdp); }
     else if(m.k==='pic0'||m.k==='picp'||m.k==='pic1'){ picPart(m); }
     else if(m.k==='view'){ onView(m); }
-    else if(m.k==='film'){ filmStart(m); }
+    else if(m.k==='film'){ if(T){ if(T.box)T.box.remove(); T=null; } filmStart(m); }
+    else if(m.k==='ftest'){ selfTest(m); }
     else if(m.k==='fp0'||m.k==='fpp'||m.k==='fp1'){ filmPart(m); }
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
