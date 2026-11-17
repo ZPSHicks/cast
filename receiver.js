@@ -641,6 +641,92 @@ function testPart(m){
   try{ t.sb.timestampOffset=0; t.sb.appendBuffer(u8); }catch(e){ t.want.r.err='append '+e; t.want.finish(); }
 }
 
+/* ---- A SHOW ME PAGE FROM THE PHONE (N1551, Kim, 17 Nov 2026: "Yes, please") ----
+   The phone sends the page whole, dressed and with its own script, in parts inside the Cast connection like a
+   picture, so this screen never needs the desk. It stands full screen over whatever was showing, which waits
+   beneath it and comes back when the phone closes the page. The phone sends each line's sound the same way; it
+   plays here, and this page says when it ended, so the phone moves on in step and never speaks itself. While a
+   line is in hand this page says where it is every second, so the phone can tell a lost screen from a long line. */
+var show=null, showIn={}, sayIn={}, sau=null, sayNow=null;
+function showPart(m){
+  if(m.k==='show0'){ showIn={id:m.id,ref:m.ref,parts:[],t0:Date.now()}; return; }
+  if(m.id!==showIn.id)return;
+  if(m.k==='showp'){ showIn.parts.push(m.b); return; }
+  var s=atob(showIn.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  var html=new TextDecoder().decode(u8), inn=showIn; showIn={};
+  showOpen(html,inn);
+}
+function showOpen(html,inn){
+  showClose(true);
+  /* a film beneath waits where it is, silent */
+  if(film){ film.play=false; try{ fv.pause(); }catch(e){} }
+  var fr=document.createElement('iframe');
+  fr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;z-index:6';
+  show={id:inn.id,ref:inn.ref,fr:fr,t0:inn.t0};
+  var my=show;
+  fr.onload=function(){
+    if(show!==my)return;
+    var ogg='';
+    try{ ogg=document.createElement('audio').canPlayType('audio/ogg; codecs="opus"'); }catch(e){}
+    tell({k:'showon',id:my.id,ms:Date.now()-my.t0,ogg:ogg,w:innerWidth,h:innerHeight});
+    log({k:'show',ref:my.ref,ms:Date.now()-my.t0,ogg:ogg,w:innerWidth,h:innerHeight});
+  };
+  fr.srcdoc=html;
+  document.body.appendChild(fr);
+  idle.style.display='none';
+}
+function showClose(quiet){
+  sayStop();
+  if(show){ try{ show.fr.remove(); }catch(e){} if(!quiet)log({k:'showoff',ref:show.ref}); }
+  show=null; showIn={}; sayIn={};
+  if(!quiet&&!film&&!live&&(!pic.src||pic.style.display==='none'))idle.style.display='';
+}
+function showMark(m){
+  if(!show||m.id!==show.id)return;
+  try{ show.fr.contentWindow.SHOWME.mark(+m.i); }catch(e){ log({k:'showerr',e:'mark '+e}); }
+}
+function sayPart(m){
+  if(!show||m.id!==show.id)return;
+  if(m.k==='say0'){ sayIn={seq:m.seq,mime:m.mime,rate:+m.rate||1,parts:[]}; return; }
+  if(m.seq!==sayIn.seq)return;
+  if(m.k==='sayp'){ sayIn.parts.push(m.b); return; }
+  var s=atob(sayIn.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  var inn=sayIn; sayIn={};
+  sayPlay(u8,inn,m.id);
+}
+function sayPlay(u8,inn,id){
+  sayStop();
+  if(!sau){ sau=new Audio(); sau.preservesPitch=true; }
+  var url=URL.createObjectURL(new Blob([u8],{type:inn.mime}));
+  var now={seq:inn.seq,id:id,url:url,done:false};
+  sayNow=now;
+  var end=function(failed){
+    if(now.done||sayNow!==now)return; now.done=true;
+    var o={k:'said',id:id,seq:now.seq}; if(failed)o.failed=failed;
+    tell(o); if(failed)log({k:'sayerr',mime:inn.mime,e:failed});
+    URL.revokeObjectURL(url); sayNow=null;
+  };
+  sau.onended=function(){ end(); };
+  sau.onerror=function(){ var e=sau.error||{}; end(e.message||('error '+(e.code||'?'))); };
+  sau.src=url; sau.playbackRate=inn.rate;
+  var p=sau.play();
+  if(p&&p.catch)p.catch(function(err){ end(String(err)); });
+}
+function sayStop(){
+  var n=sayNow; sayNow=null;
+  if(sau){ try{ sau.pause(); }catch(e){} sau.removeAttribute('src'); try{ sau.load(); }catch(e){} }
+  if(n){ n.done=true; URL.revokeObjectURL(n.url); }
+}
+function sayCtl(m){
+  if(!show||m.id!==show.id)return;
+  if(m.op==='pause'){ if(sau)try{ sau.pause(); }catch(e){} }
+  else if(m.op==='resume'){ if(sau&&sayNow){ var p=sau.play(); if(p&&p.catch)p.catch(function(){}); } }
+  else if(m.op==='stop')sayStop();
+}
+setInterval(function(){ if(show&&sayNow&&sau)tell({k:'sayat',id:show.id,seq:sayNow.seq,t:+sau.currentTime.toFixed(1),paused:sau.paused}); },1000);
+
 /* ---- Cast: the receiver side of the connection CIA opened ---- */
 try{
   ctx=cast.framework.CastReceiverContext.getInstance();
@@ -664,6 +750,11 @@ try{
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
     else if(m.k==='live'){ backLive(m); }
+    else if(m.k==='show0'||m.k==='showp'||m.k==='show1'){ showPart(m); }          /* N1551 */
+    else if(m.k==='say0'||m.k==='sayp'||m.k==='say1'){ sayPart(m); }
+    else if(m.k==='showmark'){ showMark(m); }
+    else if(m.k==='sayctl'){ sayCtl(m); }
+    else if(m.k==='showoff'){ if(show&&(m.id===show.id||m.all))showClose(); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
     else if(typeof m.k==='string'&&m.k.indexOf('bq')===0){ bq(m); }
@@ -672,6 +763,8 @@ try{
     gone={t:Date.now(),why:String(e.reason||'')};
     /* the phone feeds the film, so with the phone gone it waits where it is (Kim, 12 Nov) */
     if(film&&e.senderId===sender){ film.play=false; try{ fv.pause(); }catch(x){} }
+    /* N1551 - and a Show me's voice stops with it; the page stays up until the phone comes back */
+    if(show&&e.senderId===sender)sayStop();
     if(e.senderId===sender && !done && live)finish('CIA disconnected');
   });
   var opts=new cast.framework.CastReceiverOptions();
