@@ -156,10 +156,12 @@ function showPic(u8,meta){
   (im.decode?im.decode():Promise.resolve()).then(function(){
     if(meta.frame){
       /* a sharp view that a newer move has already overtaken is dropped */
-      if(meta.vs!==view.vs||view.z<=1||live){ URL.revokeObjectURL(url); }
+      if(meta.vs!==view.vs||view.z<=1||(live&&!over)){ URL.revokeObjectURL(url); }
       else{ sharp.src=url; sharp.style.display=''; if(sharpUrl)URL.revokeObjectURL(sharpUrl); sharpUrl=url; }
     }
+    else if(meta.id<=liveId){ URL.revokeObjectURL(url); }   /* N1536 - overtaken by the laptop's way back to its window */
     else{
+      over=true;
       picW=im.naturalWidth; picH=im.naturalHeight; picIm=im; placePic(true);
       pic.src=url; pic.style.display=''; idle.style.display='none'; sharp.style.display='none';
       if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
@@ -179,6 +181,18 @@ function picPart(m){
 
 /* ---- the picture ---- */
 var done=false;
+/* N1536 - THE LAPTOP'S PICTURES AND FILMS OVER ITS WINDOW. A laptop casting its window sends a picture or film the
+   phone's way while its viewer is open; the window's stream goes on beneath, and 'live' (with the last picture's id,
+   since the picture comes by another road and may land after it) takes the media away and shows the window. */
+var over=false, liveId=0;
+function backLive(m){
+  liveId=Math.max(liveId,+m.id||0); over=false;
+  filmStop(true);
+  pic.style.display='none'; sharp.style.display='none'; zc.style.display='none'; zcur=null; picIm=null;
+  view={z:1,cx:0.5,cy:0.5,vs:view.vs};
+  idle.style.display=live?'none':'';
+  log({k:'backlive',live:live,id:liveId});
+}
 var ms=new MediaSource(), sb=null, queue=[], hdr=null, parts=[], got=0;
 var recStart=null, off=null, live=false;
 var segs=0, bytes=0, waits=0, jumps=0, appendErr=null, appends=0, appendMs=0, appendT=0;
@@ -281,7 +295,7 @@ function steer(){
         if(!v.muted){ v.muted=true; log({k:'muted-again',said:'this screen will not start sound on its own'}); }
       });
     }
-    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; pic.style.display='none'; sharp.style.display='none'; }
+    if(!live && !v.paused && v.currentTime>0){ live=true; idle.style.display='none'; if(!over){ pic.style.display='none'; sharp.style.display='none'; } }
     if(lag>JUMP && Date.now()-lastSkip>SETTLE*1000){
       /* SKIP ONTO A KEYFRAME, AND LET IT SETTLE (N1110). C17, 24 Sep, a film with sound: 60
          skips in twelve minutes, each one landing wherever the buffer ended - so the stick had
@@ -414,7 +428,7 @@ function filmStart(m){
   filmStop(true);
   var f={id:m.id,dur:+m.dur||0,np:+m.np||Math.ceil((+m.dur||0)/2),codecs:String(m.codecs||'avc1.640028,mp4a.40.2'),
          have:{},ask:null,seq:0,q:[],play:!m.paused,loop:!!m.loop,t0:Date.now(),first:0,stalls:0,said:0,bytes:0,retry:null,done:null};
-  film=f;
+  film=f; over=true;
   fv=document.createElement('video');
   fv.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000';
   fv.playsInline=true; fv.volume=m.vol!=null?+m.vol:1;
@@ -649,6 +663,7 @@ try{
     else if(m.k==='fp0'||m.k==='fpp'||m.k==='fp1'){ filmPart(m); }
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
+    else if(m.k==='live'){ backLive(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
     else if(typeof m.k==='string'&&m.k.indexOf('bq')===0){ bq(m); }
