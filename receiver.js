@@ -641,7 +641,7 @@ function testPart(m){
   try{ t.sb.timestampOffset=0; t.sb.appendBuffer(u8); }catch(e){ t.want.r.err='append '+e; t.want.finish(); }
 }
 
-/* ---- A SHOW ME PAGE FROM THE PHONE (N1551, Kim, 17 Nov 2026: "Yes, please") ----
+/* ---- A SHOW ME PAGE FROM THE PHONE (N1553, Kim, 17 Nov 2026: "Yes, please") ----
    The phone sends the page whole, dressed and with its own script, in parts inside the Cast connection like a
    picture, so this screen never needs the desk. It stands full screen over whatever was showing, which waits
    beneath it and comes back when the phone closes the page. The phone sends each line's sound the same way; it
@@ -750,7 +750,7 @@ try{
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
     else if(m.k==='live'){ backLive(m); }
-    else if(m.k==='show0'||m.k==='showp'||m.k==='show1'){ showPart(m); }          /* N1551 */
+    else if(m.k==='show0'||m.k==='showp'||m.k==='show1'){ showPart(m); }          /* N1553 */
     else if(m.k==='say0'||m.k==='sayp'||m.k==='say1'){ sayPart(m); }
     else if(m.k==='showmark'){ showMark(m); }
     else if(m.k==='sayctl'){ sayCtl(m); }
@@ -763,7 +763,7 @@ try{
     gone={t:Date.now(),why:String(e.reason||'')};
     /* the phone feeds the film, so with the phone gone it waits where it is (Kim, 12 Nov) */
     if(film&&e.senderId===sender){ film.play=false; try{ fv.pause(); }catch(x){} }
-    /* N1551 - and a Show me's voice stops with it; the page stays up until the phone comes back */
+    /* N1553 - and a Show me's voice stops with it; the page stays up until the phone comes back */
     if(show&&e.senderId===sender)sayStop();
     if(e.senderId===sender && !done && live)finish('CIA disconnected');
   });
