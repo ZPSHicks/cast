@@ -168,10 +168,13 @@ function showPic(u8,meta){
       /* N1572 - THE NEXT FILM'S OWN FIRST FRAME (Kim, 18 Nov: "just show the first frame of the next video"). A film opens
          black, so the item before never shows; once its first frame is drawn here the black lifts and the frame stands
          until the film itself plays over it. Any other picture stays beneath, as before. */
-      if(meta.first&&film&&film.id===meta.first&&!film.first&&fv){ zc.style.display='none'; fv.style.background='transparent'; film.still=1; }
+      if(meta.first){
+        stillFor=meta.first;
+        if(film&&film.id===meta.first&&!film.painted&&fv){ foldGo(); zc.style.display='none'; fv.style.background='transparent'; film.still=1; }
+      }
     }
     var lo={k:'pic',id:meta.id,frame:!!meta.frame,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0};
-    if(meta.first)lo.first=(film&&film.id===meta.first&&film.still)?1:'late';
+    if(meta.first)lo.first=(film&&film.id===meta.first)?(film.still?1:'late'):'early';
     log(lo);
     tell({k:'shown',id:meta.id,frame:meta.frame?1:0});
   },function(err){ URL.revokeObjectURL(url); log({k:'picerr',id:meta.id,e:String(err)}); tell({k:'shown',id:meta.id,failed:true,frame:meta.frame?1:0}); });
@@ -430,8 +433,20 @@ function bq(m){
    ahead is let go. ?cushion= seconds, for testing. */
 var CUSH=+(Q.get('cushion')||20);
 var film=null, fv=null, fIn={};
+/* N1572 - THE HAND-OFF TO A FILM'S OWN FIRST FRAME (Kim, 18 Nov 06:41 on C17: "a small black, then the frame, then it
+   goes black, and then the video starts"). A phone that sends the frame says so (still): what stood there - the picture,
+   or the film before, frozen and silent - holds until that frame is drawn, two seconds at most, then black. The frame
+   then stands until the film has actually painted, never merely started. stillFor is the film the last such frame is of. */
+var stillFor=0, fold=null, foldTm=0;
+function foldGo(){
+  clearTimeout(foldTm);
+  if(fold){ try{ fold.pause(); }catch(e){} try{ URL.revokeObjectURL(fold.src); }catch(e){} fold.removeAttribute('src'); try{ fold.load(); }catch(e){} fold.remove(); fold=null; }
+}
 function filmStart(m){
-  filmStop(true);
+  var hold=!!m.still;
+  foldGo();
+  if(hold&&fv&&film&&!film.dead){ fold=fv; fv=null; try{ fold.pause(); fold.muted=true; }catch(e){} }
+  filmStop(true,hold);
   var f={id:m.id,dur:+m.dur||0,np:+m.np||Math.ceil((+m.dur||0)/2),codecs:String(m.codecs||'avc1.640028,mp4a.40.2'),
          have:{},ask:null,seq:0,q:[],play:!m.paused,loop:!!m.loop,t0:Date.now(),first:0,stalls:0,said:0,bytes:0,retry:null,done:null};
   film=f; over=true;
@@ -441,8 +456,17 @@ function filmStart(m){
   f.rate=+m.rate||1;
   document.body.appendChild(fv);
   idle.style.display='none';
+  var v=fv;
+  if(hold){
+    v.style.background='transparent';
+    if(stillFor===m.id&&pic.style.display!=='none'){ foldGo(); f.still=1; }          /* its frame came first */
+    else foldTm=setTimeout(function(){ if(film===f&&!f.still&&!f.painted){ foldGo(); v.style.background='#000'; } },2000);
+  }
+  /* painted: two frames presented, or half a second where the screen cannot say */
+  function painted(){ if(film!==f||f.painted)return; f.painted=Date.now(); foldGo(); v.style.background='#000'; log({k:'filmpaint',id:f.id,ms:f.painted-f.t0}); }
   fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
-  fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); fv.style.background='#000'; log({k:'film',id:f.id,started:f.first-f.t0,still:f.still||0}); } });
+  fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0,still:f.still||0});
+    if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(function(){ v.requestVideoFrameCallback(painted); }); else setTimeout(painted,500); } });
   /* a looping film goes back to its start, which is kept in hand for it (Kim, 12 Nov: "loop does not work") */
   fv.addEventListener('ended',function(){ if(film!==f)return; if(f.loop){ fv.currentTime=0; filmTick(); } else tell({k:'fend',id:f.id}); });
   /* A FILM THE SCREEN CANNOT DECODE ENDS HERE, saying why (Kim, 16 Nov: the conference TV played Resurrection, 820 tall,
@@ -466,8 +490,9 @@ function filmStart(m){
   fv.src=URL.createObjectURL(f.ms);
   fv.defaultPlaybackRate=f.rate; fv.playbackRate=f.rate;   /* a load sets the speed back, so after it */
 }
-function filmStop(quiet){
+function filmStop(quiet,keepOld){
   var f=film; film=null; fIn={};
+  if(!keepOld)foldGo();
   if(fv){ try{ fv.pause(); }catch(e){} try{ URL.revokeObjectURL(fv.src); }catch(e){} fv.removeAttribute('src'); try{ fv.load(); }catch(e){} fv.remove(); fv=null; }
   if(f&&!quiet)log({k:'filmstop',id:f.id,stalls:f.stalls,mb:Math.round(f.bytes/1e5)/10});
   if(!quiet&&(!pic.src||pic.style.display==='none'))idle.style.display='';
@@ -755,6 +780,7 @@ try{
     else if(m.k==='fp0'||m.k==='fpp'||m.k==='fp1'){ filmPart(m); }
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
+    else if(m.k==='fnostill'){ if(film&&film.id===m.id&&!film.still&&!film.painted&&fv){ foldGo(); fv.style.background='#000'; } }
     else if(m.k==='live'){ backLive(m); }
     else if(m.k==='show0'||m.k==='showp'||m.k==='show1'){ showPart(m); }          /* N1553 */
     else if(m.k==='say0'||m.k==='sayp'||m.k==='say1'){ sayPart(m); }
