@@ -146,7 +146,7 @@ function panNote(){
 }
 var viewAt=0;
 function onView(m){
-  /* N1598 - the same move by the other road, or an older one, is dropped; a phone that reloaded starts its count again */
+  /* N1606 - the same move by the other road, or an older one, is dropped; a phone that reloaded starts its count again */
   if(+m.vs&&+m.vs<=view.vs&&Date.now()-viewAt<3000)return;
   viewAt=Date.now();
   view={z:+m.z||1,cx:m.cx!=null?+m.cx:0.5,cy:m.cy!=null?+m.cy:0.5,vs:+m.vs||0};
@@ -222,7 +222,7 @@ function onMedia(e){
     if(m.k==='hello'){ recStart=m.recStart; openSb(m.mime); }
     else if(m.k==='ahello'){ amime=m.mime; openASb(m.mime); }
     else if(m.k==='seg'||m.k==='pic'){ hdr=m; parts=[]; got=0; }
-    /* N1598 - a zoom or pan comes down the call too, as well as inside the Cast connection: whichever lands first moves it */
+    /* N1606 - a zoom or pan comes down the call too, as well as inside the Cast connection: whichever lands first moves it */
     else if(m.k==='view'){ onView(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     return;
@@ -758,7 +758,7 @@ function castGet(u){
     deckGot[u].catch(function(){ delete deckGot[u]; }); }
   return deckGot[u];
 }
-/* N1599 - THE DECK COMES TO THE SCREEN WHOLE (Kim, 18 Nov 19:22: he left CIA for another app, the voice went and the
+/* N1605 - THE DECK COMES TO THE SCREEN WHOLE (Kim, 18 Nov 19:22: he left CIA for another app, the voice went and the
    pictures stayed empty, while the cursor ran on). Everything was asked of the phone as the deck reached it, so a
    phone in the background left the screen with nothing. Now, once the deck is open, every line's voice is asked in
    the order it is read, through the deck's own cache, and then every file of its folder; the phone answers the
