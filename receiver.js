@@ -703,7 +703,7 @@ function testPart(m){
    line is in hand this page says where it is every second, so the phone can tell a lost screen from a long line. */
 var show=null, showIn={}, sayIn={}, sau=null, sayNow=null;
 function showPart(m){
-  if(m.k==='show0'){ showIn={id:m.id,ref:m.ref,parts:[],t0:Date.now(),deck:!!m.deck,kv:!!m.kv,voice:m.voice||'',rate:+m.rate||1.15}; return; }
+  if(m.k==='show0'){ showIn={id:m.id,ref:m.ref,parts:[],t0:Date.now(),deck:!!m.deck,kv:!!m.kv,voice:m.voice||'',rate:+m.rate||1.15,pre:m.pre||null}; return; }
   if(m.id!==showIn.id)return;
   if(m.k==='showp'){ showIn.parts.push(m.b); return; }
   var s=atob(showIn.parts.join('')), u8=new Uint8Array(s.length);
@@ -717,7 +717,7 @@ function showOpen(html,inn){
   if(film){ film.play=false; try{ fv.pause(); }catch(e){} }
   var fr=document.createElement('iframe');
   fr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;z-index:6';
-  show={id:inn.id,ref:inn.ref,fr:fr,t0:inn.t0,deck:inn.deck,kv:inn.kv};
+  show={id:inn.id,ref:inn.ref,fr:fr,t0:inn.t0,deck:inn.deck,kv:inn.kv,pre:inn.pre};
   if(inn.deck)SET={voice:inn.voice,rate:inn.rate};
   var my=show;
   fr.onload=function(){
@@ -726,6 +726,7 @@ function showOpen(html,inn){
     try{ ogg=document.createElement('audio').canPlayType('audio/ogg; codecs="opus"'); }catch(e){}
     tell({k:'showon',id:my.id,ms:Date.now()-my.t0,ogg:ogg,w:innerWidth,h:innerHeight});
     log({k:'show',ref:my.ref,ms:Date.now()-my.t0,ogg:ogg,w:innerWidth,h:innerHeight});
+    if(my.deck)setTimeout(function(){ if(show===my)deckPreload(my); },1500);
   };
   fr.srcdoc=html;
   document.body.appendChild(fr);
@@ -742,13 +743,13 @@ function showClose(quiet){
    cannot reach the desk, so the deck's pictures, clips and voice are asked of the phone, which sends them back
    inside the Cast connection. The deck reads its voice and settings from this page as it does from CIA's
    (KV and SET); the bridge at its head asks castGet for each picture and tells deckUi its line and chapter. */
-var deckQ={}, deckN=0, deckGot={}, deckUrls=[], SET={};
+var deckQ={}, deckN=0, deckGot={}, deckUrls=[], SET={}, deckPre=false;
 var KV={ ok:function(){ return !!(show&&show.deck&&show.kv); },
          render:function(t,v){ return deckAsk({k:'kvask',t:String(t||''),v:String(v||'')}); } };
 function deckAsk(o){
   return new Promise(function(res,rej){
     if(!show||!show.deck)return rej(new Error('no deck'));
-    var q=++deckN; deckQ[q]={res:res,rej:rej,parts:[],id:show.id}; o.id=show.id; o.q=q; tell(o);
+    var q=++deckN; deckQ[q]={res:res,rej:rej,parts:[],id:show.id}; o.id=show.id; o.q=q; if(deckPre)o.pre=1; tell(o);
   });
 }
 function castGet(u){
@@ -756,6 +757,24 @@ function castGet(u){
   if(!deckGot[u]){ deckGot[u]=deckAsk({k:'dget',u:u}).then(function(r){ return r.url; });
     deckGot[u].catch(function(){ delete deckGot[u]; }); }
   return deckGot[u];
+}
+/* N1599 - THE DECK COMES TO THE SCREEN WHOLE (Kim, 18 Nov 19:22: he left CIA for another app, the voice went and the
+   pictures stayed empty, while the cursor ran on). Everything was asked of the phone as the deck reached it, so a
+   phone in the background left the screen with nothing. Now, once the deck is open, every line's voice is asked in
+   the order it is read, through the deck's own cache, and then every file of its folder; the phone answers the
+   deck's own asks first and these after. When all is here the phone is told it may go. */
+function deckPreload(my){
+  var w=my.fr.contentWindow, lines=[], t0=Date.now(), n=0, ok=0, done=0;
+  try{ var sc=w.eval('typeof SCRIPT!=="undefined"?SCRIPT:[]')||[];
+    for(var i=0;i<sc.length;i++){ var st=(sc[i]&&sc[i].steps)||[]; for(var j=0;j<st.length;j++)if(st[j].say&&lines.indexOf(st[j].say)<0)lines.push(st[j].say); } }catch(e){}
+  var jobs=[];
+  if(typeof w.voiceRender==='function'&&KV.ok())lines.forEach(function(t){ jobs.push(function(){ return w.voiceRender(t); }); });
+  (my.pre||[]).forEach(function(u){ jobs.push(function(){ return castGet(u); }); });
+  n=jobs.length; if(!n)return;
+  var end=function(){ if(++done<n||show!==my)return;
+    var o={k:'showpre',id:my.id,n:n,ok:ok,lines:lines.length,ms:Date.now()-t0}; tell(o); log({k:'showpre',ref:my.ref,n:n,ok:ok,ms:o.ms}); };
+  jobs.forEach(function(j){ var p; deckPre=true; try{ p=j(); }catch(e){ p=null; } deckPre=false;
+    if(p&&p.then)p.then(function(){ ok++; end(); },end); else end(); });
 }
 function deckUi(o){ if(show&&show.deck){ o.k='deckui'; o.id=show.id; tell(o); } }
 function deckPart(m){
