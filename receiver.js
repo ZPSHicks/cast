@@ -697,7 +697,7 @@ function testPart(m){
    line is in hand this page says where it is every second, so the phone can tell a lost screen from a long line. */
 var show=null, showIn={}, sayIn={}, sau=null, sayNow=null;
 function showPart(m){
-  if(m.k==='show0'){ showIn={id:m.id,ref:m.ref,parts:[],t0:Date.now()}; return; }
+  if(m.k==='show0'){ showIn={id:m.id,ref:m.ref,parts:[],t0:Date.now(),deck:!!m.deck,kv:!!m.kv,voice:m.voice||'',rate:+m.rate||1.15}; return; }
   if(m.id!==showIn.id)return;
   if(m.k==='showp'){ showIn.parts.push(m.b); return; }
   var s=atob(showIn.parts.join('')), u8=new Uint8Array(s.length);
@@ -711,7 +711,8 @@ function showOpen(html,inn){
   if(film){ film.play=false; try{ fv.pause(); }catch(e){} }
   var fr=document.createElement('iframe');
   fr.style.cssText='position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;z-index:6';
-  show={id:inn.id,ref:inn.ref,fr:fr,t0:inn.t0};
+  show={id:inn.id,ref:inn.ref,fr:fr,t0:inn.t0,deck:inn.deck,kv:inn.kv};
+  if(inn.deck)SET={voice:inn.voice,rate:inn.rate};
   var my=show;
   fr.onload=function(){
     if(show!==my)return;
@@ -725,10 +726,52 @@ function showOpen(html,inn){
   idle.style.display='none';
 }
 function showClose(quiet){
-  sayStop();
+  sayStop(); deckDrop();
   if(show){ try{ show.fr.remove(); }catch(e){} if(!quiet)log({k:'showoff',ref:show.ref}); }
   show=null; showIn={}; sayIn={};
   if(!quiet&&!film&&!live&&(!pic.src||pic.style.display==='none'))idle.style.display='';
+}
+/* ---- A DECK FROM THE PHONE (N1575, Kim, 18 Nov: the Creator concept "doesn't cast at all") ----
+   A deck runs here on its own clock, its own cursor and its own player; the phone is its remote. This screen
+   cannot reach the desk, so the deck's pictures, clips and voice are asked of the phone, which sends them back
+   inside the Cast connection. The deck reads its voice and settings from this page as it does from CIA's
+   (KV and SET); the bridge at its head asks castGet for each picture and tells deckUi its line and chapter. */
+var deckQ={}, deckN=0, deckGot={}, deckUrls=[], SET={};
+var KV={ ok:function(){ return !!(show&&show.deck&&show.kv); },
+         render:function(t,v){ return deckAsk({k:'kvask',t:String(t||''),v:String(v||'')}); } };
+function deckAsk(o){
+  return new Promise(function(res,rej){
+    if(!show||!show.deck)return rej(new Error('no deck'));
+    var q=++deckN; deckQ[q]={res:res,rej:rej,parts:[],id:show.id}; o.id=show.id; o.q=q; tell(o);
+  });
+}
+function castGet(u){
+  if(!show||!show.deck)return Promise.reject(new Error('no deck'));
+  if(!deckGot[u]){ deckGot[u]=deckAsk({k:'dget',u:u}).then(function(r){ return r.url; });
+    deckGot[u].catch(function(){ delete deckGot[u]; }); }
+  return deckGot[u];
+}
+function deckUi(o){ if(show&&show.deck){ o.k='deckui'; o.id=show.id; tell(o); } }
+function deckPart(m){
+  var p=deckQ[m.q]; if(!p||!show||m.id!==show.id||p.id!==m.id)return;
+  if(m.k==='dg0'){ p.mime=m.mime||''; p.dur=m.dur; p.parts=[]; return; }
+  if(m.k==='dgp'){ p.parts.push(m.b); return; }
+  delete deckQ[m.q];
+  if(m.k==='dgerr'){ p.rej(new Error(m.e||'the phone could not send it')); return; }
+  var s=atob(p.parts.join('')), u8=new Uint8Array(s.length);
+  for(var i=0;i<s.length;i++)u8[i]=s.charCodeAt(i);
+  var url=URL.createObjectURL(new Blob([u8],p.mime?{type:p.mime}:{})); deckUrls.push(url);
+  p.res({url:url,dur:p.dur});
+}
+function deckKey(m){
+  if(!show||!show.deck||m.id!==show.id)return;
+  try{ var w=show.fr.contentWindow;
+    w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:m.key,code:m.code||'',bubbles:true,cancelable:true})); }
+  catch(e){ log({k:'showerr',e:'key '+e}); }
+}
+function deckDrop(){
+  for(var q in deckQ){ try{ deckQ[q].rej(new Error('closed')); }catch(e){} }
+  deckQ={}; deckGot={}; deckUrls.forEach(function(u){ try{ URL.revokeObjectURL(u); }catch(e){} }); deckUrls=[];
 }
 function showMark(m){
   if(!show||m.id!==show.id)return;
@@ -804,6 +847,8 @@ try{
     else if(m.k==='showmark'){ showMark(m); }
     else if(m.k==='sayctl'){ sayCtl(m); }
     else if(m.k==='showoff'){ if(show&&(m.id===show.id||m.all))showClose(); }
+    else if(m.k==='dg0'||m.k==='dgp'||m.k==='dg1'||m.k==='dgerr'){ deckPart(m); }   /* N1575 */
+    else if(m.k==='deckkey'){ deckKey(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     else if(m.k==='dbg'){ document.body.classList.toggle('dbg',!!m.on); }
     else if(typeof m.k==='string'&&m.k.indexOf('bq')===0){ bq(m); }
