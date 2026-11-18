@@ -144,7 +144,11 @@ function panNote(){
   pan.tm=setTimeout(function(){ var p=pan; pan=null;
     if(p.n>2)log({k:'pan',moves:p.n,ms:p.last-p.t0,gapMax:p.max,gapAvg:Math.round((p.last-p.t0)/(p.n-1)),draws:p.draws,z:view.z}); },1000);
 }
+var viewAt=0;
 function onView(m){
+  /* N1598 - the same move by the other road, or an older one, is dropped; a phone that reloaded starts its count again */
+  if(+m.vs&&+m.vs<=view.vs&&Date.now()-viewAt<3000)return;
+  viewAt=Date.now();
   view={z:+m.z||1,cx:m.cx!=null?+m.cx:0.5,cy:m.cy!=null?+m.cy:0.5,vs:+m.vs||0};
   sharp.style.display='none';
   panNote();
@@ -218,6 +222,8 @@ function onMedia(e){
     if(m.k==='hello'){ recStart=m.recStart; openSb(m.mime); }
     else if(m.k==='ahello'){ amime=m.mime; openASb(m.mime); }
     else if(m.k==='seg'||m.k==='pic'){ hdr=m; parts=[]; got=0; }
+    /* N1598 - a zoom or pan comes down the call too, as well as inside the Cast connection: whichever lands first moves it */
+    else if(m.k==='view'){ onView(m); }
     else if(m.k==='bye'){ finish(m.said||''); }
     return;
   }
