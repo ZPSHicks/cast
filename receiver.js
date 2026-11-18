@@ -165,13 +165,19 @@ function showPic(u8,meta){
       picW=im.naturalWidth; picH=im.naturalHeight; picIm=im; placePic(true);
       pic.src=url; pic.style.display=''; idle.style.display='none'; sharp.style.display='none';
       if(picUrl)URL.revokeObjectURL(picUrl); picUrl=url;
+      /* N1572 - THE NEXT FILM'S OWN FIRST FRAME (Kim, 18 Nov: "just show the first frame of the next video"). A film opens
+         black, so the item before never shows; once its first frame is drawn here the black lifts and the frame stands
+         until the film itself plays over it. Any other picture stays beneath, as before. */
+      if(meta.first&&film&&film.id===meta.first&&!film.first&&fv){ zc.style.display='none'; fv.style.background='transparent'; film.still=1; }
     }
-    log({k:'pic',id:meta.id,frame:!!meta.frame,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0});
+    var lo={k:'pic',id:meta.id,frame:!!meta.frame,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0};
+    if(meta.first)lo.first=(film&&film.id===meta.first&&film.still)?1:'late';
+    log(lo);
     tell({k:'shown',id:meta.id,frame:meta.frame?1:0});
   },function(err){ URL.revokeObjectURL(url); log({k:'picerr',id:meta.id,e:String(err)}); tell({k:'shown',id:meta.id,failed:true,frame:meta.frame?1:0}); });
 }
 function picPart(m){
-  if(m.k==='pic0'){ picIn={id:m.id,mime:m.mime,len:m.len,frame:m.frame,vs:m.vs,parts:[]}; return; }
+  if(m.k==='pic0'){ picIn={id:m.id,mime:m.mime,len:m.len,frame:m.frame,vs:m.vs,first:m.first,parts:[]}; return; }
   if(m.id!==picIn.id)return;
   if(m.k==='picp'){ picIn.parts.push(m.b); return; }
   var s=atob(picIn.parts.join('')), u8=new Uint8Array(s.length);
@@ -436,7 +442,7 @@ function filmStart(m){
   document.body.appendChild(fv);
   idle.style.display='none';
   fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
-  fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0}); } });
+  fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); fv.style.background='#000'; log({k:'film',id:f.id,started:f.first-f.t0,still:f.still||0}); } });
   /* a looping film goes back to its start, which is kept in hand for it (Kim, 12 Nov: "loop does not work") */
   fv.addEventListener('ended',function(){ if(film!==f)return; if(f.loop){ fv.currentTime=0; filmTick(); } else tell({k:'fend',id:f.id}); });
   /* A FILM THE SCREEN CANNOT DECODE ENDS HERE, saying why (Kim, 16 Nov: the conference TV played Resurrection, 820 tall,
