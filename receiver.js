@@ -170,7 +170,7 @@ function showPic(u8,meta){
          until the film itself plays over it. Any other picture stays beneath, as before. */
       if(meta.first){
         stillFor=meta.first;
-        if(film&&film.id===meta.first&&!film.painted&&fv){ foldGo(); zc.style.display='none'; fv.style.background='transparent'; film.still=1; }
+        if(film&&film.id===meta.first&&!film.painted&&fv){ foldGo(); zc.style.display='none'; film.still=1; picUp(); }
       }
     }
     var lo={k:'pic',id:meta.id,frame:!!meta.frame,bytes:u8.length,w:im.naturalWidth,h:im.naturalHeight,ms:Date.now()-t0};
@@ -436,8 +436,14 @@ var film=null, fv=null, fIn={};
 /* N1572 - THE HAND-OFF TO A FILM'S OWN FIRST FRAME (Kim, 18 Nov 06:41 on C17: "a small black, then the frame, then it
    goes black, and then the video starts"). A phone that sends the frame says so (still): what stood there - the picture,
    or the film before, frozen and silent - holds until that frame is drawn, two seconds at most, then black. The frame
-   then stands until the film has actually painted, never merely started. stillFor is the film the last such frame is of. */
+   then stands until the film has actually painted, never merely started. stillFor is the film the last such frame is of.
+   Kim, 06:58: still a black between the frame and the film. A Chromecast plays a film on its own layer beneath the page
+   and cuts a hole through the page where the video stands, so a picture behind the video is never seen there: the
+   picture is lifted ABOVE the film while it holds, and lowered only once the film has played a third of a second, or
+   two presented frames and a tenth of a second, or a second and a half at the latest - the log says which. */
 var stillFor=0, fold=null, foldTm=0;
+function picUp(){ pic.style.zIndex='3'; }
+function picDown(){ pic.style.zIndex=''; }
 function foldGo(){
   clearTimeout(foldTm);
   if(fold){ try{ fold.pause(); }catch(e){} try{ URL.revokeObjectURL(fold.src); }catch(e){} fold.removeAttribute('src'); try{ fold.load(); }catch(e){} fold.remove(); fold=null; }
@@ -458,15 +464,25 @@ function filmStart(m){
   idle.style.display='none';
   var v=fv;
   if(hold){
-    v.style.background='transparent';
-    if(stillFor===m.id&&pic.style.display!=='none'){ foldGo(); f.still=1; }          /* its frame came first */
-    else foldTm=setTimeout(function(){ if(film===f&&!f.still&&!f.painted){ foldGo(); v.style.background='#000'; } },2000);
+    if(stillFor===m.id&&pic.style.display!=='none'){ foldGo(); f.still=1; picUp(); }     /* its frame came first */
+    else{
+      if(!fold&&pic.style.display!=='none')picUp();                                      /* the picture before holds */
+      foldTm=setTimeout(function(){ if(film===f&&!f.still&&!f.painted){ foldGo(); picDown(); } },2000);
+    }
+    setTimeout(function(){ if(film===f&&!f.painted)picDown(); },15000);          /* a film that never plays is not hidden */
   }
-  /* painted: two frames presented, or half a second where the screen cannot say */
-  function painted(){ if(film!==f||f.painted)return; f.painted=Date.now(); foldGo(); v.style.background='#000'; log({k:'filmpaint',id:f.id,ms:f.painted-f.t0}); }
+  function painted(by){
+    if(film!==f||f.painted)return; f.painted=Date.now();
+    setTimeout(function(){ if(film!==f)return; foldGo(); picDown(); },150);
+    log({k:'filmpaint',id:f.id,ms:f.painted-f.t0,by:by,rvfc:!!v.requestVideoFrameCallback});
+  }
   fv.addEventListener('waiting',function(){ if(film===f&&f.first&&!fv.seeking)f.stalls++; });
   fv.addEventListener('playing',function(){ if(film===f&&!f.first){ f.first=Date.now(); log({k:'film',id:f.id,started:f.first-f.t0,still:f.still||0});
-    if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(function(){ v.requestVideoFrameCallback(painted); }); else setTimeout(painted,500); } });
+    var s0=v.currentTime, frames=0;
+    if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(function(){ v.requestVideoFrameCallback(function(){ frames=2; if(v.currentTime-s0>=0.1)painted('frames'); }); });
+    v.addEventListener('timeupdate',function tu(){ var d=v.currentTime-s0;
+      if(d>=0.3||(frames&&d>=0.1)){ v.removeEventListener('timeupdate',tu); painted(d>=0.3?'time':'frames+time'); } });
+    setTimeout(function(){ painted('timer'); },1500); } });
   /* a looping film goes back to its start, which is kept in hand for it (Kim, 12 Nov: "loop does not work") */
   fv.addEventListener('ended',function(){ if(film!==f)return; if(f.loop){ fv.currentTime=0; filmTick(); } else tell({k:'fend',id:f.id}); });
   /* A FILM THE SCREEN CANNOT DECODE ENDS HERE, saying why (Kim, 16 Nov: the conference TV played Resurrection, 820 tall,
@@ -493,6 +509,7 @@ function filmStart(m){
 function filmStop(quiet,keepOld){
   var f=film; film=null; fIn={};
   if(!keepOld)foldGo();
+  picDown();
   if(fv){ try{ fv.pause(); }catch(e){} try{ URL.revokeObjectURL(fv.src); }catch(e){} fv.removeAttribute('src'); try{ fv.load(); }catch(e){} fv.remove(); fv=null; }
   if(f&&!quiet)log({k:'filmstop',id:f.id,stalls:f.stalls,mb:Math.round(f.bytes/1e5)/10});
   if(!quiet&&(!pic.src||pic.style.display==='none'))idle.style.display='';
@@ -780,7 +797,7 @@ try{
     else if(m.k==='fp0'||m.k==='fpp'||m.k==='fp1'){ filmPart(m); }
     else if(m.k==='fctl'){ filmCtl(m); }
     else if(m.k==='fstop'){ filmStop(); }
-    else if(m.k==='fnostill'){ if(film&&film.id===m.id&&!film.still&&!film.painted&&fv){ foldGo(); fv.style.background='#000'; } }
+    else if(m.k==='fnostill'){ if(film&&film.id===m.id&&!film.still&&!film.painted&&fv){ foldGo(); picDown(); } }
     else if(m.k==='live'){ backLive(m); }
     else if(m.k==='show0'||m.k==='showp'||m.k==='show1'){ showPart(m); }          /* N1553 */
     else if(m.k==='say0'||m.k==='sayp'||m.k==='say1'){ sayPart(m); }
